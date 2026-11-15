@@ -87,7 +87,7 @@ Largest part is 215 × 109 × 38 mm. Gears and carriers can share plates.
   length 9. The design works with 9 mm posts: 7 mm D engagement, set screw at z 10.3 against a post tip at z 11.5.
   The ±3 mm carrier travel covers residual post errors.
 
-## Controller (Pico 2, MicroPython, USB serial)
+## Controller (Pico or Pico 2, MicroPython, USB serial)
 
 **Wiring**
 - Servo signals go to GP0–GP6 (Pico pins 1, 2, 4, 5, 6, 7, 9), in panel order: Presence, Bass, Middle, Treble, Master Volume, Treble Volume, Bass Volume.
@@ -95,7 +95,7 @@ Largest part is 215 × 109 × 38 mm. Gears and carriers can share plates.
 - Servo brown goes to the supply ground. Tie that ground to a Pico GND pin, e.g. pin 3.
 
 **Flashing**
-1. Hold BOOTSEL while plugging in the Pico. Drag over the RP2350 MicroPython `.uf2` from micropython.org.
+1. Hold BOOTSEL while plugging in the Pico. Drag over the MicroPython `.uf2` from micropython.org: RP2040 for a Pico, RP2350 for a Pico 2.
 2. Copy the firmware over:
    `mpremote cp firmware/main.py :main.py && mpremote reset`
 

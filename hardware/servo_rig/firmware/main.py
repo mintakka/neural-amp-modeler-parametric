@@ -1,4 +1,4 @@
-# Servo rig firmware for a Raspberry Pi Pico 2 (MicroPython).
+# Servo rig firmware for a Raspberry Pi Pico or Pico 2 (MicroPython).
 # Seven SG92R servos on GP0..GP6, driven over USB serial with line commands:
 #   PING                  -> OK servo-rig 1
 #   SET <i> <us>          move servo i (0-6) to a pulse width, approaching from below
