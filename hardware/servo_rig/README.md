@@ -86,3 +86,22 @@ Largest part is 215 × 109 × 38 mm. Gears and carriers can share plates.
 - Measured already: panel size, post x0 ≈ 90, pitch 38.1, post y ≈ 25, D-shaft 6/4.0, post
   length 9. The design works with 9 mm posts: 7 mm D engagement, set screw at z 10.3 against a post tip at z 11.5.
   The ±3 mm carrier travel covers residual post errors.
+
+## Controller (Pico 2, MicroPython, USB serial)
+
+**Wiring**
+- Servo signals go to GP0–GP6 (Pico pins 1, 2, 4, 5, 6, 7, 9), in panel order: Presence, Bass, Middle, Treble, Master Volume, Treble Volume, Bass Volume.
+- Servo red goes to a separate 5 V supply rated 4 A or more. Never power the servos from the Pico's VBUS. Put a 470–1000 µF capacitor across that supply.
+- Servo brown goes to the supply ground. Tie that ground to a Pico GND pin, e.g. pin 3.
+
+**Flashing**
+1. Hold BOOTSEL while plugging in the Pico. Drag over the RP2350 MicroPython `.uf2` from micropython.org.
+2. Copy the firmware over:
+   `mpremote cp firmware/main.py :main.py && mpremote reset`
+
+**Use** (from `firmware/`):
+- Check the connection with `python rig.py ping`.
+- Calibrate each knob with `python rig.py raw <Knob> <us>`, then record where the pointer lands with `python rig.py cal <Knob> <us> <dial>`. Record at least 0, 5 and 10.
+- After that, `python rig.py set Presence=5 Bass=7.5` moves knobs by dial value, and `python rig.py off` stops the pulses.
+
+The firmware always approaches a target from below, so gear slack lands the same way every time. Turn pulses off before recording: idle servos can buzz and inject noise into the audio.
