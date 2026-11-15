@@ -87,17 +87,18 @@ Largest part is 215 × 109 × 38 mm. Gears and carriers can share plates.
   length 9. The design works with 9 mm posts: 7 mm D engagement, set screw at z 10.3 against a post tip at z 11.5.
   The ±3 mm carrier travel covers residual post errors.
 
-## Controller (Pico or Pico 2, MicroPython, USB serial)
+## Controller (Pico or Pico 2, Pico SDK C++, USB serial)
 
 **Wiring**
 - Servo signals go to GP0–GP6 (Pico pins 1, 2, 4, 5, 6, 7, 9), in panel order: Presence, Bass, Middle, Treble, Master Volume, Treble Volume, Bass Volume.
 - Servo red goes to a separate 5 V supply rated 4 A or more. Never power the servos from the Pico's VBUS. Put a 470–1000 µF capacitor across that supply.
 - Servo brown goes to the supply ground. Tie that ground to a Pico GND pin, e.g. pin 3.
 
-**Flashing**
-1. Hold BOOTSEL while plugging in the Pico. Drag over the MicroPython `.uf2` from micropython.org: RP2040 for a Pico, RP2350 for a Pico 2.
-2. Copy the firmware over:
-   `mpremote cp firmware/main.py :main.py && mpremote reset`
+**Flashing** (needs the Pico SDK at `~/Projects/pico/pico-sdk`, or set `PICO_SDK_PATH`)
+1. Build it from `firmware/`:
+   `cmake -B build && cmake --build build`
+   For a Pico 2, add `-DPICO_BOARD=pico2` to the first command.
+2. Hold BOOTSEL while plugging in the board, then drag `build/servo_rig.uf2` onto it.
 
 **Use** (from `firmware/`):
 - Check the connection with `python rig.py ping`.

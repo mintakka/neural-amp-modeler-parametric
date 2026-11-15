@@ -143,3 +143,4 @@ tests/resources/*.reapeaks
 AGENTS.md
 
 .DS_Store
+hardware/servo_rig/firmware/build/
