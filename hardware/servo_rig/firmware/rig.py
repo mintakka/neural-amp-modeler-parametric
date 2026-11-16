@@ -29,7 +29,17 @@ KNOBS = (
     "Treble Volume",
     "Bass Volume",
 )
+# The top-row servos are mounted flipped, so a higher pulse turns their pots the other way.
+# Every pulse width here is in "knob space": low = the pot's 0 end, for every knob. These
+# servos are mirrored around 1500 us on the way to the firmware.
+INVERTED = frozenset({"Bass", "Treble", "Treble Volume"})
 CAL_PATH = Path(__file__).with_name("rig_calibration.json")
+
+
+def to_servo(knob, us):
+    """Knob-space pulse width -> the pulse the firmware should send to that servo."""
+    us = int(round(us))
+    return 3000 - us if knob in INVERTED else us
 
 
 class Rig:
@@ -50,15 +60,15 @@ class Rig:
         return reply[2:].strip()
 
     def at(self, knob, us):
-        self.command(f"AT {KNOBS.index(knob)} {int(us)}")
+        self.command(f"AT {KNOBS.index(knob)} {to_servo(knob, us)}")
 
     def raw(self, knob, us):
-        self.command(f"SET {KNOBS.index(knob)} {int(us)}")
+        self.command(f"SET {KNOBS.index(knob)} {to_servo(knob, us)}")
 
     def set(self, values, calibration):
         targets = ["-"] * len(KNOBS)
         for knob, dial in values.items():
-            targets[KNOBS.index(knob)] = str(dial_to_us(calibration, knob, dial))
+            targets[KNOBS.index(knob)] = str(to_servo(knob, dial_to_us(calibration, knob, dial)))
         self.command("MOVE " + " ".join(targets))
 
     def off(self):
