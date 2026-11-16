@@ -2,6 +2,8 @@
 Host side of the servo rig: talk to the Pico 2 and map dial numbers (0-10) to servo pulses.
 
     python rig.py ping
+    python rig.py at Presence 800            # after power-up: where the servo physically is
+    python rig.py speed 150                  # ramp speed in us/s
     python rig.py raw Presence 1500          # move by pulse width (calibration)
     python rig.py cal Presence 1500 5.2      # record: at 1500 us the pointer reads 5.2
     python rig.py set Presence=5 Bass=7.5    # move by dial value (needs >= 2 cal points)
@@ -47,6 +49,9 @@ class Rig:
             raise RuntimeError(f"{line!r} -> {reply or 'timeout'}")
         return reply[2:].strip()
 
+    def at(self, knob, us):
+        self.command(f"AT {KNOBS.index(knob)} {int(us)}")
+
     def raw(self, knob, us):
         self.command(f"SET {KNOBS.index(knob)} {int(us)}")
 
@@ -91,6 +96,10 @@ def main(argv):
     rig = Rig()
     if cmd == "ping":
         print(rig.command("PING"))
+    elif cmd == "at":
+        rig.at(" ".join(args[:-1]), int(args[-1]))
+    elif cmd == "speed":
+        rig.command(f"SPEED {float(args[0])}")
     elif cmd == "raw":
         rig.raw(" ".join(args[:-1]), int(args[-1]))
     elif cmd == "set":
