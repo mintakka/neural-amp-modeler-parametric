@@ -73,7 +73,7 @@ GEAR_GAP = 0.5           # pot gear back face to bushing end
 SERVO_ANGLE = [-90, 120, -90, 120, -90, 120, -90]
 
 # --- Pot gear hub / fixing ---------------------------------------------------
-D_BORE_CLR = 0.15        # radial clearance on the D-bore
+D_BORE_CLR = 0.25        # radial clearance on the D-bore (0.15 printed too tight)
 HUB_R = 8.0
 SETSCREW_D = 3.2         # M3 set screw clearance
 M3_NUT_AF, M3_NUT_T = 5.6, 2.6   # nut trap (with clearance)
