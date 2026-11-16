@@ -118,9 +118,23 @@ first. If your servos measure larger than 4.8 mm over the spline (some clones ru
    For a Pico 2, add `-DPICO_BOARD=pico2` to the first command.
 2. Hold BOOTSEL while plugging in the board, then drag `build/servo_rig.uf2` onto it.
 
-**Use** (from `firmware/`):
-- Check the connection with `python rig.py ping`.
-- Calibrate each knob with `python rig.py raw <Knob> <us>`, then record where the pointer lands with `python rig.py cal <Knob> <us> <dial>`. Record at least 0, 5 and 10.
-- After that, `python rig.py set Presence=5 Bass=7.5` moves knobs by dial value, and `python rig.py off` stops the pulses.
+**How the servos move** (SG92R datasheet: 1000–2000 µs ≈ 180°, about 5.5 µs per degree):
+- **Range:** the firmware refuses any pulse outside 1000–2000 µs, so a servo can never be driven into its internal stops.
+- **Scale:** the pot's full 0–10 is only about 920 µs of servo travel, about 92 µs per dial number.
+- **Speed:** the servo itself moves at full speed toward every pulse. All slow motion comes from the firmware: each move is one continuous ramp, about 150 µs/s or 1.6 dial numbers per second, updated every 20 ms. It always starts from the servo's known position.
+- **Known positions:** positions are saved in the Pico's flash. A servo whose move was interrupted (for example by power loss) boots as "unknown" and won't move until it is re-homed.
+- **Moves:** one servo at a time, which stays within USB power.
+- **Slack:** every move finishes with a 20 µs approach from the low-pulse side, so gear slack lands the same way every time.
+- **Recording:** turn pulses off before recording. Idle servos can buzz and inject noise into the audio.
 
-The firmware always approaches a target from below, so gear slack lands the same way every time. Turn pulses off before recording: idle servos can buzz and inject noise into the audio.
+**Never turn a meshed knob by hand.** The Pico then no longer knows where that servo is. The only recovery is re-homing it.
+
+**Calibrate each knob once** (from `firmware/`). The top-row servos (2, 4, 6) turn their pots the opposite way, so for them the dial goes *down* as the pulse goes up. Calibration records this per knob.
+1. **Re-home.** With that servo's gear **unmeshed**, run `python rig.py home <Knob>`. The servo jumps to centre (1500 µs). It's unmeshed, so the jump is harmless.
+2. **Mesh at 5.** Turn the pot by hand to 5, then mesh the gear.
+3. **Step toward one end.** Use `python rig.py raw <Knob> <us>` in 25–50 µs steps. After each step, record the dial reading with `python rig.py cal <Knob> <us> <dial>`. **Stop at about 0.3. Never drive to the stop.**
+4. **Step toward the other end** the same way, stopping at about 9.7.
+5. **Set the limits.** Run `python rig.py limits <Knob> <lo> <hi>` with the pulses at about 0.2 and 9.8. The Pico stores them and refuses anything outside them.
+6. **Move by dial value.** `python rig.py set <Knob>=<dial>` now works. It refuses dials beyond the calibrated span.
+
+If a step doesn't change the dial, or the servo buzzes, stop and run `python rig.py off`.
