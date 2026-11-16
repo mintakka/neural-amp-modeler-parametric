@@ -10,7 +10,7 @@
 //   LIMITS <i> <lo> <hi>     per-servo safe range (measured in calibration), saved to flash
 //   SET <i> <us>             one smooth ramp of servo i to <us>
 //   MOVE <us0> ... <us6>     ramp each listed servo in turn ("-" = leave it alone)
-//   SPEED <us_per_s>         ramp cruise speed, 10-400 (default 150)
+//   SPEED <us_per_s>         ramp cruise speed, 10-400 (default 225)
 //   OFF [i]                  stop pulses (servo goes limp, held by friction)
 //   GET                      -> OK <pos0> ... <pos6>     (0 = position unknown)
 //   GETLIM                   -> OK <lo0> <hi0> ... <lo6> <hi6>
@@ -54,7 +54,7 @@ constexpr float kSpeedMin = 10.f, kSpeedMax = 400.f;
 constexpr int kBacklashUs = 20;
 constexpr int kSettleMs = 150;       // after arriving, before answering OK
 
-float speed = 150.f;                 // us/s, about 1.6 dial numbers per second
+float speed = 225.f;                 // us/s, about 2.4 dial numbers per second
 float pos[kNumServos] = {};          // current pulse width; 0 = unknown
 float lo[kNumServos], hi[kNumServos];
 bool on[kNumServos] = {};
