@@ -4,7 +4,7 @@
 Run:  python servo_rig.py
 Writes one STEP per unique printable part (in print orientation, on the bed at
 the origin) to ./step/, plus step/assembly.step with everything in place
-(panel, posts, servos and horns are placeholder bodies, assembly only).
+(panel, posts and servos are placeholder bodies, assembly only).
 
 Coordinate system (assembly): X along the panel (0 = panel left edge),
 Y up (0 = panel bottom edge), Z out of the panel toward the user (0 = face).
@@ -89,21 +89,26 @@ SERVO_TAB_T = 2.5        # tab thickness
 SERVO_HOLE_SPACING = 27.8
 SERVO_SHAFT_FROM_END = 5.9   # shaft axis from the near body end
 SERVO_BOSS_R, SERVO_BOSS_H = 5.9, 3.0
-SERVO_BASE_TO_HORN = 31.5    # ESTIMATED base to outer flat face of fitted horn
+# AS-BUILT: the printed frame and carriers put the servo base this far behind
+# the servo gear's servo-side face (old horn stack 31.5 - 1.6). Keep it fixed.
+SERVO_BASE_TO_GEAR = 29.9
 SERVO_FIT = 0.25             # clearance around body in the carrier
 
-# --- Stock horn (pocket in the servo gear back face) -------------------------
-HORN_TYPE = "double"     # "double" | "single" | "disc"
-HORN_LEN = 32.0          # ESTIMATED tip-to-tip (double) / disc diameter
-HORN_HUB_D = 7.2         # ESTIMATED
-HORN_ROOT_W, HORN_TIP_W = 5.6, 4.0   # ESTIMATED arm widths
-HORN_T = 1.6             # ESTIMATED arm/disc thickness = pocket depth
-HORN_HUB_H = 3.0         # ESTIMATED hub height below the arm (servo side)
-HORN_CLR = 0.25
-HORN_BOLT_R = [12.0]     # bolt radii on each arm (drill horn holes to 2.0)
-HORN_BOLT_D = 2.2        # M2 clearance
-HORN_CBORE_D, HORN_CBORE_H = 4.2, 1.2
-HORN_SCREW_ACCESS_D = 5.5
+# --- Servo gear: direct drive on the output spline (no horn) -----------------
+# TowerPro micro spline: 21T, ~4.8 mm OD (Pololu/makerworld; clones vary +/-0.1+)
+SPLINE_TEETH = 21            # ESTIMATED
+SPLINE_OD = 4.8              # ESTIMATED shaft spline outside diameter
+SPLINE_TOOTH_H = 0.3         # ESTIMATED radial tooth depth
+SPLINE_LEN = 3.0             # ESTIMATED splined length = engagement depth
+SERVO_BASE_TO_SPLINE_TIP = 29.9  # ESTIMATED base to end of output shaft
+SPLINE_FIT = 0.05            # TUNE: radial clearance added to the printed bore
+                             # (FDM holes print ~0.1 small -> slight press fit)
+SPLINE_TIP_CLR = 0.3         # shaft end to bottom of bore
+SPLINE_HUB_D = 9.0
+GEAR_CASE_CLR = 0.5          # hub end to servo case top
+SCREW_CLR_D = 2.3            # center screw (M2 / 2 mm self-tapper) clearance
+SCREW_HEAD_D, SCREW_HEAD_H = 4.0, 1.3   # ESTIMATED stock pan head
+SCREW_LEN = 6.0              # center screw length used for the reach check
 
 # --- Carrier (servo + bearing ring on pot hub; slots onto the frame) ---------
 CARRIER_T = 4.0
@@ -145,8 +150,12 @@ R_SERVO_TIP = MODULE * Z_SERVO / 2 + MODULE
 R_POT_TIP = MODULE * Z_POT / 2 + MODULE
 Z_GEAR0 = BUSHING_PROUD + GEAR_GAP          # gear plane back (panel side)
 Z_GEAR1 = Z_GEAR0 + GEAR_FACE
-Z_HORN = Z_GEAR1 - HORN_T                    # outer face of the horn
-Z_SERVO_BASE = Z_HORN + SERVO_BASE_TO_HORN
+Z_SERVO_BASE = Z_GEAR1 + SERVO_BASE_TO_GEAR
+Z_CASE_TOP = Z_SERVO_BASE - SERVO_H - SERVO_BOSS_H       # boss face
+Z_SPLINE_TIP = Z_SERVO_BASE - SERVO_BASE_TO_SPLINE_TIP
+Z_SG_HUB_END = Z_CASE_TOP - GEAR_CASE_CLR               # servo gear hub end
+Z_SG_BORE_END = Z_SPLINE_TIP - SPLINE_TIP_CLR           # bottom of spline bore
+Z_SG_CBORE = Z_GEAR0 + SCREW_HEAD_H + 0.3               # counterbore floor
 Z_CARRIER1 = Z_SERVO_BASE - SERVO_TAB_Z - SERVO_TAB_T   # tabs rest here
 Z_CARRIER0 = Z_CARRIER1 - CARRIER_T
 Z_FRAME1 = Z_CARRIER0
@@ -256,40 +265,28 @@ def involute_gear(z, m, face, backlash, pa_deg=PRESSURE_ANGLE, n=10):
     return cq.Workplane("XY").polyline(pts).close().extrude(face)
 
 
-def horn_shape(clr, h):
-    """Stock horn outline extruded z 0..h, centered on the shaft."""
-    if HORN_TYPE == "disc":
-        return cq.Workplane("XY").circle(HORN_LEN / 2 + clr).extrude(h)
-    arms = [0] if HORN_TYPE == "single" else [0, 180]
-    shape = cq.Workplane("XY").circle(HORN_HUB_D / 2 + clr).extrude(h)
-    L = HORN_LEN / 2
-    for a in arms:
-        rw, tw = HORN_ROOT_W / 2 + clr, HORN_TIP_W / 2 + clr
-        arm = cq.Workplane("XY").polyline(
-            [(0, -rw), (L - tw, -tw), (L - tw, tw), (0, rw)]).close().extrude(h)
-        arm = arm.union(cyl_z(L - HORN_TIP_W / 2, 0, tw, 0, h))
-        shape = shape.union(arm.rotate((0, 0, 0), (0, 0, 1), a))
-    return shape
-
-
-def horn_bolt_xy():
-    arms = [0] if HORN_TYPE == "single" else [0, 180]
-    if HORN_TYPE == "disc":
-        arms = [0, 90, 180, 270]
-    return [(r * math.cos(math.radians(a)), r * math.sin(math.radians(a)))
-            for a in arms for r in HORN_BOLT_R]
+def spline_profile(r_root, r_tip, n, z0, z1):
+    """Serrated profile (triangular teeth) between r_tip (inner) and r_root."""
+    pts = []
+    for k in range(2 * n):
+        r, a = (r_root if k % 2 else r_tip), math.pi * k / n
+        pts.append((r * math.cos(a), r * math.sin(a)))
+    return poly_z(pts, z0, z1)
 
 
 # =============================================================================
 # Parts (local coordinates)
 # =============================================================================
 def make_servo_gear():
+    """Local z=0 is the panel-side (screw) face; hub points at the servo."""
+    o = Z_GEAR0
     g = involute_gear(Z_SERVO, MODULE, GEAR_FACE, BACKLASH)
-    g = g.cut(cyl_z(0, 0, HORN_SCREW_ACCESS_D / 2, -1, GEAR_FACE + 1))
-    g = g.cut(horn_shape(HORN_CLR, HORN_T + 0.01).translate((0, 0, GEAR_FACE - HORN_T)))
-    for x, y in horn_bolt_xy():
-        g = g.cut(cyl_z(x, y, HORN_BOLT_D / 2, -1, GEAR_FACE + 1))
-        g = g.cut(cyl_z(x, y, HORN_CBORE_D / 2, -1, HORN_CBORE_H))
+    g = g.union(cyl_z(0, 0, SPLINE_HUB_D / 2, 0, Z_SG_HUB_END - o))
+    g = g.cut(spline_profile(SPLINE_OD / 2 + SPLINE_FIT,
+                             SPLINE_OD / 2 - SPLINE_TOOTH_H + SPLINE_FIT,
+                             SPLINE_TEETH, Z_SG_BORE_END - o, Z_SG_HUB_END - o + 1))
+    g = g.cut(cyl_z(0, 0, SCREW_CLR_D / 2, -1, Z_SG_BORE_END - o + 0.01))
+    g = g.cut(cyl_z(0, 0, SCREW_HEAD_D / 2 + 0.2, -1, Z_SG_CBORE - o))
     return g
 
 
@@ -433,9 +430,9 @@ def make_servo(p):
     return s
 
 
-def make_horn(p, rot=0.0):
-    h = horn_shape(0, HORN_T).union(cyl_z(0, 0, HORN_HUB_D / 2, HORN_T, HORN_T + HORN_HUB_H))
-    return h.rotate((0, 0, 0), (0, 0, 1), rot).translate((p["S"][0], p["S"][1], Z_HORN))
+def make_shaft(p):
+    return cyl_z(p["S"][0], p["S"][1], SPLINE_OD / 2 - SPLINE_TOOTH_H,
+                 Z_SPLINE_TIP, Z_CASE_TOP)
 
 
 def make_panel_bits(post_rot):
@@ -487,6 +484,13 @@ def main():
     zs_abs = Z_GEAR1 + SETSCREW_ABOVE_FACE
     ok(POST_TIP >= zs_abs + 1.0, f"set screw (z={zs_abs:.1f}) bites the post "
        f"(post tip z={POST_TIP:.1f}); D engagement {min(POST_TIP, HUB_TOP) - Z_GEAR0:.1f} mm")
+    web = Z_SG_BORE_END - Z_SG_CBORE
+    eng = min(SPLINE_LEN, Z_SG_HUB_END - Z_SPLINE_TIP)
+    ok(eng >= 0.9 * SPLINE_LEN, f"servo spline engagement {eng:.1f} mm of {SPLINE_LEN:.1f} "
+       f"(hub end z={Z_SG_HUB_END:.1f}, case top z={Z_CASE_TOP:.1f})")
+    ok(web >= 1.2 and Z_SG_CBORE - Z_GEAR0 <= SCREW_HEAD_H + 0.31,
+       f"center screw head {Z_SG_CBORE - Z_GEAR0 - SCREW_HEAD_H:.1f} mm below face, web {web:.1f} mm, "
+       f"M2x{SCREW_LEN:.0f} reaches {SCREW_LEN - web - SPLINE_TIP_CLR:.1f} mm into the shaft")
     print(f"  z stack: gears {Z_GEAR0:.1f}-{Z_GEAR1:.1f}, frame {Z_FRAME0:.1f}-{Z_FRAME1:.1f},"
           f" carrier {Z_CARRIER0:.1f}-{Z_CARRIER1:.1f}, servo base {Z_SERVO_BASE:.1f}")
 
@@ -511,7 +515,7 @@ def main():
         key = f"carrier_{'top' if p['sgn'] > 0 else 'bottom'}_{p['ang']:+.0f}deg"
         carriers_unique.setdefault(key, [c, 0])[1] += 1
         hw[f"servo_{i}"] = make_servo(p)
-        hw[f"horn_{i}"] = make_horn(p, d)
+        hw[f"shaft_{i}"] = make_shaft(p)
     pico = box(PICO_CENTER[0] - 25.5, PICO_CENTER[0] + 25.5, PICO_CENTER[1] - 10.5,
                PICO_CENTER[1] + 10.5, Z_FRAME1, Z_FRAME1 + 8)
     hw["pico2"] = pico
@@ -565,7 +569,7 @@ def main():
     print("== Writing assembly.step")
     asm = cq.Assembly()
     colors = {"frame": "gray", "carrier": "orange", "servo_gear": "green",
-              "pot_gear": "yellow", "servo": "blue", "horn": "white", "pico2": "darkgreen"}
+              "pot_gear": "yellow", "servo": "blue", "shaft": "white", "pico2": "darkgreen"}
     for k, s in {**rig, **hw, **panel}.items():
         col = next((v for c, v in colors.items() if k.startswith(c)), "black")
         if k == "chassis":

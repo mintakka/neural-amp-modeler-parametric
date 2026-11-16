@@ -7,7 +7,7 @@ A 180° servo gives about 324° at the pot.
 `python servo_rig.py` (conda env `sci`, needs `cadquery`) rebuilds everything,
 runs the checks, and writes `step/*.step`. Parts are exported in print
 orientation. `step/assembly.step` shows the rig on placeholder panel, posts,
-servos and horns.
+servos and output shafts.
 
 ## How it works
 - **Pair** = servo + carrier + servo gear + pot gear. The carrier holds the servo,
@@ -36,7 +36,7 @@ servos and horns.
 | `frame_right.step` | 1 | as exported |
 | `carrier_bottom_-90deg.step` | 4 | flat |
 | `carrier_top_+120deg.step` | 3 | flat |
-| `servo_gear.step` | 7 | flat, horn pocket up |
+| `servo_gear.step` | 7 | gear face down, spline hub up |
 | `pot_gear.step` | 7 | gear face down, hub up |
 
 Largest part is 215 × 109 × 38 mm. Gears and carriers can share plates.
@@ -48,17 +48,27 @@ Largest part is 215 × 109 × 38 mm. Gears and carriers can share plates.
   - 3 × M3x35 thumbscrew/SHCS + insert (in the floor underside): bottom clamps
   - 1 × M3x16 + insert + jam nut: X stop
   - 4 × M3x12 + 2 washers + nut: frame lap joint
-- **M2:** 14 × M2x8 + nut (servo gear to horn; drill the horn arm holes to 2.0 mm),
-  plus 4 × M2 screw, nut and 5 mm standoff for the Pico 2.
-- Servo kit: the stock double-arm horn, horn screw and 2 tab self-tappers per servo.
+- **M2:** 4 × M2 screw, nut and 5 mm standoff for the Pico 2.
+- Servo kit: the center screw and 2 tab self-tappers per servo (horns not used). The
+  stock center screw is short. With an M2x6 or 2 × 6 mm self-tapper it reaches 3.6 mm into
+  the shaft, through a 2.1 mm web.
+
+## Servo gear (direct spline drive)
+The servo gear presses straight onto the SG92R output spline: a printed internal spline
+(`SPLINE_TEETH` 21, `SPLINE_OD` 4.8, `SPLINE_TOOTH_H` 0.3, 3 mm engagement, all ESTIMATED).
+The servo's center screw holds it, and its head sits 0.3 mm below the gear face in a shallow
+counterbore. The teeth stay in the same plane as before, and the hub stops 0.5 mm short of the servo case.
+**Fit tuning:** `SPLINE_FIT` (radial, default 0.05). If the gear won't press on, raise it
+by 0.05. If it slips or wobbles, lower it by 0.05 (negative is fine). Print one test gear
+first. If your servos measure larger than 4.8 mm over the spline (some clones run 4.9 mm or more), set
+`SPLINE_OD` to the caliper value.
 - Zip ties (≤4 mm). Each carrier has a slot pair beside its servo.
 
 ## Assembly
 1. Press the 4 inserts in (3 in the floor underside, 1 in the left end wall).
 2. Bolt the frame halves together at the roof and floor laps.
-3. Bolt each servo gear to its horn (M2, heads in the counterbores, nuts on the servo
-   side). Center each servo electrically at 90°, then fit the horn and gear and drive the horn
-   screw through the center hole.
+3. Center each servo electrically at 90°. Press its servo gear onto the spline (hub
+   first) and drive the center screw through the gear into the shaft.
 4. Fit each servo into its carrier from the front (tabs on the front face) and fix it with the
    tab screws. Loosely bolt the carriers to the frame (M3x8, washer, nut in the groove).
 5. On the amp, set each pot to mid-travel. Slide a pot gear onto each post until it
@@ -73,11 +83,11 @@ Largest part is 215 × 109 × 38 mm. Gears and carriers can share plates.
    relocate each pair. Then retighten.
 
 ## Measure before the final print (all in the CONFIG block)
-- **`SERVO_BASE_TO_HORN`** (servo base to the outer face of the fitted horn) sets the whole
-  depth stack. Also check `SERVO_TAB_Z`, `SERVO_H`, the SG92R body and tab dimensions,
+- `SERVO_BASE_TO_GEAR` is fixed by the printed frame and carriers.
+  `SERVO_BASE_TO_SPLINE_TIP` (est. 29.9) and `SERVO_BOSS_H` set the spline engagement and
+  the hub-to-case gap. Also check `SERVO_TAB_Z`, `SERVO_H`, the SG92R body and tab dimensions,
   and `SERVO_SHAFT_FROM_END`.
-- Stock horn: `HORN_LEN`, `HORN_HUB_D`, the arm widths, `HORN_T` and `HORN_BOLT_R` (a hole radius you
-  will drill out). Set `HORN_TYPE` to match the horn you use.
+- Spline: `SPLINE_OD`, `SPLINE_TEETH`, `SPLINE_LEN`, then tune `SPLINE_FIT`.
 - `BUSHING_PROUD` (pot gear stop, est. 4.0), `NUT_AF` and `NUT_PROUD` (est. 12.7 / 2.5).
 - Control positions: `TOGGLE_HMG`, `TOGGLE_BRIGHT` (est. 25 mm above the posts, midway between
   their pots), `POWER_TOGGLE`, `POWER_LED`, `INPUT_JACK` (est. x=365).
