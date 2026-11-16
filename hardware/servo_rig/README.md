@@ -121,9 +121,9 @@ first. If your servos measure larger than 4.8 mm over the spline (some clones ru
 **How the servos move** (SG92R datasheet: 1000–2000 µs ≈ 180°, about 5.5 µs per degree):
 - **Range:** the firmware refuses any pulse outside 1000–2000 µs, so a servo can never be driven into its internal stops.
 - **Scale:** the pot's full 0–10 is only about 920 µs of servo travel, about 92 µs per dial number.
-- **Speed:** the servo itself moves at full speed toward every pulse. All slow motion comes from the firmware: each move is one continuous ramp, about 225 µs/s or 2.4 dial numbers per second, updated every 20 ms. It always starts from the servo's known position.
+- **Speed:** the servo itself moves at full speed toward every pulse. All slow motion comes from the firmware: each move is one continuous ramp, about 450 µs/s or 5 dial numbers per second, updated every 20 ms. It always starts from the servo's known position.
 - **Known positions:** positions are saved in the Pico's flash. A servo whose move was interrupted (for example by power loss) boots as "unknown" and won't move until it is re-homed.
-- **Moves:** one servo at a time, which stays within USB power.
+- **Moves:** `MOVE` ramps all its listed servos together. Use the separate 5 V supply for that; USB power only covers one servo at a time.
 - **Slack:** every move finishes with a 20 µs approach from the low-pulse side, so gear slack lands the same way every time.
 - **Recording:** turn pulses off before recording. Idle servos can buzz and inject noise into the audio.
 

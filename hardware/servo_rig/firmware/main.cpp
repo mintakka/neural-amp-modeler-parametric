@@ -9,8 +9,8 @@
 //                            value makes the servo jump to it at full speed.
 //   LIMITS <i> <lo> <hi>     per-servo safe range (measured in calibration), saved to flash
 //   SET <i> <us>             one smooth ramp of servo i to <us>
-//   MOVE <us0> ... <us6>     ramp each listed servo in turn ("-" = leave it alone)
-//   SPEED <us_per_s>         ramp cruise speed, 10-400 (default 225)
+//   MOVE <us0> ... <us6>     ramp all listed servos together ("-" = leave it alone)
+//   SPEED <us_per_s>         ramp cruise speed, 10-800 (default 450)
 //   OFF [i]                  stop pulses (servo goes limp, held by friction)
 //   GET                      -> OK <pos0> ... <pos6>     (0 = position unknown)
 //   GETLIM                   -> OK <lo0> <hi0> ... <lo6> <hi6>
@@ -47,14 +47,14 @@ constexpr uint kPins[kNumServos] = {0, 1, 2, 3, 4, 5, 6};
 constexpr int kUsMin = 1000, kUsMax = 2000; // SG92R datasheet range: never exceeded
 constexpr uint16_t kPeriodUs = 20000;
 constexpr int kTickMs = 20;          // one servo frame
-constexpr float kAccel = 400.f;      // us/s^2
-constexpr float kSpeedMin = 10.f, kSpeedMax = 400.f;
+constexpr float kAccel = 1200.f;     // us/s^2: full speed in under 0.4 s
+constexpr float kSpeedMin = 10.f, kSpeedMax = 800.f;
 // Final approach always from the low-pulse side, so gear slack sits the same way.
 // ~2x the printed gears' backlash; small enough not to visibly wiggle the knob.
 constexpr int kBacklashUs = 20;
 constexpr int kSettleMs = 150;       // after arriving, before answering OK
 
-float speed = 225.f;                 // us/s, about 2.4 dial numbers per second
+float speed = 450.f;                 // us/s, about 5 dial numbers per second
 float pos[kNumServos] = {};          // current pulse width; 0 = unknown
 float lo[kNumServos], hi[kNumServos];
 bool on[kNumServos] = {};
@@ -132,48 +132,76 @@ void Pulse(int i) {
     pwm_set_gpio_level(kPins[i], on[i] ? static_cast<uint16_t>(lroundf(pos[i])) : 0);
 }
 
-// One continuous ramp of servo i to `target`: trapezoidal velocity, updated every frame.
-void Ramp(int i, float target) {
+// Ramp every servo with target[i] >= 0 together: each one continuous trapezoidal-velocity
+// move, all updated every frame.
+void Ramp(const float* target) {
     const float dt = kTickMs / 1000.f;
-    float vel = 0.f;
+    float vel[kNumServos] = {};
     absolute_time_t next = get_absolute_time();
     for (;;) {
-        float remaining = target - pos[i];
-        if (fabsf(remaining) < 0.5f && fabsf(vel) <= kAccel * dt) break;
-        // Fastest speed that can still stop at the target, capped at the cruise speed.
-        float vmax = std::min(speed, sqrtf(2.f * kAccel * fabsf(remaining)));
-        float want = remaining > 0 ? vmax : -vmax;
-        vel += std::clamp(want - vel, -kAccel * dt, kAccel * dt);
-        float step = vel * dt;
-        pos[i] = fabsf(step) >= fabsf(remaining) ? target : pos[i] + step;
-        Pulse(i);
+        bool active = false;
+        for (int i = 0; i < kNumServos; i++) {
+            if (target[i] < 0) continue;
+            float remaining = target[i] - pos[i];
+            if (fabsf(remaining) < 0.5f && fabsf(vel[i]) <= kAccel * dt) {
+                pos[i] = target[i];
+                vel[i] = 0.f;
+                Pulse(i);
+                continue;
+            }
+            active = true;
+            // Fastest speed that can still stop at the target, capped at the cruise speed.
+            float vmax = std::min(speed, sqrtf(2.f * kAccel * fabsf(remaining)));
+            float want = remaining > 0 ? vmax : -vmax;
+            vel[i] += std::clamp(want - vel[i], -kAccel * dt, kAccel * dt);
+            float step = vel[i] * dt;
+            pos[i] = fabsf(step) >= fabsf(remaining) ? target[i] : pos[i] + step;
+            Pulse(i);
+        }
+        if (!active) break;
         next = delayed_by_ms(next, kTickMs);
         sleep_until(next);
     }
-    pos[i] = target;
-    Pulse(i);
 }
 
-// Smoothly move servo i to `us`. Pulses start at the known position, so switching on
-// doesn't move it; the move itself is one ramp, with a short final approach from below.
-bool MoveOne(int i, int us, char* error) {
-    if (pos[i] == 0.f) {
-        sprintf(error, "servo %d position unknown; re-home it (AT) first", i);
-        return false;
+// Smoothly move every servo with targets[i] >= 0, together. Pulses start at each servo's
+// known position, so switching on doesn't move it; each move is one ramp, with a short
+// final approach from below. Nothing moves unless every target is valid.
+bool Move(const int* targets, char* error) {
+    for (int i = 0; i < kNumServos; i++) {
+        if (targets[i] < 0) continue;
+        if (pos[i] == 0.f) {
+            sprintf(error, "servo %d position unknown; re-home it (AT) first", i);
+            return false;
+        }
+        if (targets[i] < lo[i] || targets[i] > hi[i]) {
+            sprintf(error, "servo %d: %d us is outside its limits %d-%d", i, targets[i],
+                    static_cast<int>(lo[i]), static_cast<int>(hi[i]));
+            return false;
+        }
     }
-    if (us < lo[i] || us > hi[i]) {
-        sprintf(error, "servo %d: %d us is outside its limits %d-%d", i, us,
-                static_cast<int>(lo[i]), static_cast<int>(hi[i]));
-        return false;
+    float low[kNumServos], final_[kNumServos];
+    bool any_low = false, any = false;
+    for (int i = 0; i < kNumServos; i++) {
+        low[i] = final_[i] = -1.f;
+        if (targets[i] < 0) continue;
+        on[i] = true;
+        Pulse(i);
+        if (fabsf(pos[i] - targets[i]) < 0.5f) continue;
+        any = moving[i] = 1;
+        final_[i] = static_cast<float>(targets[i]);
+        // Servos going down overshoot slightly, then come up onto the target; servos going
+        // up go straight there. Both kinds start in the same frame.
+        low[i] = targets[i] < pos[i]
+                     ? std::max(lo[i], static_cast<float>(targets[i] - kBacklashUs))
+                     : final_[i];
+        any_low |= targets[i] < pos[i];
     }
-    on[i] = true;
-    Pulse(i);
-    if (fabsf(pos[i] - us) < 0.5f) return true;
-    moving[i] = 1;
+    if (!any) return true;
     Save();
-    if (us < pos[i]) Ramp(i, std::max(lo[i], static_cast<float>(us - kBacklashUs)));
-    Ramp(i, static_cast<float>(us));
-    moving[i] = 0;
+    Ramp(low);
+    if (any_low) Ramp(final_);
+    for (int i = 0; i < kNumServos; i++) moving[i] = 0;
     Save();
     sleep_ms(kSettleMs);
     return true;
@@ -235,11 +263,15 @@ void Handle(char* line) {
             Save();
         }
     } else if (!strcmp(cmd, "SET") && argc == 3 && ParseServo(argv[1], &i)) {
-        ok = MoveOne(i, atoi(argv[2]), error);
+        int targets[kNumServos];
+        std::fill(targets, targets + kNumServos, -1);
+        targets[i] = atoi(argv[2]);
+        ok = Move(targets, error);
     } else if (!strcmp(cmd, "MOVE") && argc == 1 + kNumServos) {
-        // One servo at a time: smooth, and within the USB port's current budget.
-        for (int k = 0; k < kNumServos && ok; k++)
-            if (strcmp(argv[1 + k], "-")) ok = MoveOne(k, atoi(argv[1 + k]), error);
+        int targets[kNumServos];
+        for (int k = 0; k < kNumServos; k++)
+            targets[k] = strcmp(argv[1 + k], "-") ? atoi(argv[1 + k]) : -1;
+        ok = Move(targets, error);
     } else if (!strcmp(cmd, "SPEED") && argc == 2) {
         float v = static_cast<float>(atof(argv[1]));
         if (v < kSpeedMin || v > kSpeedMax) {
