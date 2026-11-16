@@ -29,10 +29,18 @@ KNOBS = (
     "Treble Volume",
     "Bass Volume",
 )
-# The top-row servos are mounted flipped, so a higher pulse turns their pots the other way.
-# Every pulse width here is in "knob space": low = the pot's 0 end, for every knob. These
-# servos are mirrored around 1500 us on the way to the firmware.
-INVERTED = frozenset({"Bass", "Treble", "Treble Volume"})
+# Servo mounting (numbered 1-7 left to right, matching KNOBS and GP0-GP6):
+#   bottom row: servos 1, 3, 5, 7 -> Presence, Middle, Master Volume, Bass Volume
+#   top row:    servos 2, 4, 6    -> Bass, Treble, Treble Volume   (mounted upside down)
+# Every pot on the amp turns the same way, but the top-row servos face the opposite way,
+# so the same pulse change turns their pots in the opposite direction and their "pot at 0"
+# end is at the opposite end of the servo's travel.
+#
+# Everything in this file is in KNOB SPACE: a low pulse width means "pot toward 0" and a
+# high one "pot toward 10", for all seven knobs. to_servo() mirrors the top-row servos
+# around 1500 us (us -> 3000 - us) just before a command goes to the firmware; nothing else
+# needs to know which row a servo is in. The firmware itself only ever sees raw servo pulses.
+INVERTED = frozenset({"Bass", "Treble", "Treble Volume"})  # servos 2, 4, 6 (top row)
 CAL_PATH = Path(__file__).with_name("rig_calibration.json")
 
 
