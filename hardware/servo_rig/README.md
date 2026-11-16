@@ -20,8 +20,11 @@ servos and output shafts.
 - **Frame**: a plate with a roof and floor, made as two halves joined by 4 + 4 mm lap joints
   in the roof and floor (4 × M3). C-jaws clamp the chassis just behind the face
   (≤22 mm back, clear of the tubes). The top jaws rest on the chassis top and the lips
-  sit on the face, with a relief for the rounded bend. Three bottom jaws have
-  thumbscrews that push up on the chassis bottom. A screw in the left end wall sets
+  sit on the face, with a relief for the rounded bend. The chassis bottom is open
+  (bare 1 mm edge, no flange), so the three bottom jaws carry a **chassis clamp**
+  each: an L-hook that sits on top of the jaw and reaches up behind the front wall;
+  the wall is pinched between the hook lip (inside) and the jaw lip (outside), and the
+  jaw's M3 screw locks the hook. A screw in the left end wall sets
   X against the chassis side. Finger windows sit over the HMG and Bright toggles. The
   power switch, LED and input jack lie outside the frame.
 - Servo gears alternate below and above the post row. The top ones are swung 30° left
@@ -29,7 +32,8 @@ servos and output shafts.
 - **The frame reaches about 32 mm below the chassis bottom**, so stand the amp on
   ≥40 mm risers or let the front overhang the table edge by about 30 mm.
 
-## Print list (PETG, 0.2 mm layers, 4 walls; 23 prints, no supports)
+## Print list (PETG, 0.2 mm layers, 4 walls; 26 prints, no supports)
+- `chassis_clamp` × 3 (21 × 11 × 8 mm, prints on its side as exported; ~2 g each)
 | STEP file | Qty | Orientation |
 |---|---|---|
 | `frame_left.step` | 1 | as exported (user face down, ribs up) |
@@ -45,7 +49,8 @@ Largest part is 215 × 109 × 38 mm. Gears and carriers can share plates.
 - **M3 (29 screws, 26 nuts, 4 heat-set inserts, 22 washers):**
   - 14 × M3x8 + washer + nut: carriers to frame (nuts slide in the frame grooves)
   - 7 × M3x6–8 grub screw + nut: pot gear set screws (nut trap in the hub)
-  - 3 × M3x35 thumbscrew/SHCS + insert (in the floor underside): bottom clamps
+  - 3 × M3x35 SHCS (or the thumbscrews) + washer + insert (in the floor underside):
+    chassis clamps, screwed from inside the open chassis bottom (M3x30 also works, 3.5 mm engagement)
   - 1 × M3x16 + insert + jam nut: X stop
   - 4 × M3x12 + 2 washers + nut: frame lap joint
 - **M2:** 4 × M2 screw, nut and 5 mm standoff for the Pico 2.
@@ -74,8 +79,11 @@ first. If your servos measure larger than 4.8 mm over the spline (some clones ru
 5. On the amp, set each pot to mid-travel. Slide a pot gear onto each post until it
    touches the bushing, back it off about 0.5 mm (use a paper shim), and tighten the grub screw on the flat.
 6. Offer the frame up: the top jaws go over the chassis top and the carrier rings slide over the
-   pot gear hubs while the gears mesh. Push the frame in and left against the X-stop screw,
-   then snug the 3 bottom thumbscrews.
+   pot gear hubs while the gears mesh. Push the frame in and left against the X-stop screw.
+   Through the open chassis bottom, set a chassis clamp on top of each bottom jaw with its
+   lip up behind the front wall, drop an M3x35 (washer under the head) through the clamp's
+   slot and the jaw hole, push the clamp forward so the lip bears on the inside of the wall,
+   and tighten into the floor insert. No new inserts are needed.
 7. Each carrier now sits where its pot puts it. Tighten the carrier bolts, then
    run every servo end to end to confirm it moves freely. Zip-tie the cables and mount the Pico 2 on the
    left extension.

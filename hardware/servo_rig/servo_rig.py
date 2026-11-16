@@ -140,6 +140,21 @@ INSERT_D = 4.0           # M3 heat-set insert hole
 PICO_CENTER = (27.0, 60.0)   # Raspberry Pi Pico 2 (51 x 21, holes 47 x 11.4, M2)
 PICO_HOLE_D = 2.2
 
+# --- Chassis clamp (x3, one per CLAMP_RIB; replaces the bottom thumbscrews) --
+# The HDRX20 chassis bottom is open, so the bottom jaws have nothing to push on.
+# This L-hook sits on top of each bottom jaw (inside the open bottom), its lip
+# reaches up behind the 1 mm front wall, and an M3 screw dropped through its
+# Z-slot, through the jaw's thumbscrew hole, into the frame's existing insert
+# locks it. Push the hook forward against the wall before tightening: the wall
+# is pinched between this lip (inside) and the frame's jaw lip (outside).
+CHASSIS_T = 1.0          # MEASURED  sheet thickness of the front wall
+CLAMP_W = CLAMP_RIB_T    # width in X (matches the jaw it sits on)
+CLAMP_BASE_T = 4.0       # ESTIMATED base plate thickness (sits on the jaw top)
+CLAMP_LIP_T = 3.0        # ESTIMATED lip thickness behind the wall
+CLAMP_LIP_H = 8.0        # ESTIMATED lip height above the wall's bottom edge
+CLAMP_GRIP_CLR = 0.1     # ESTIMATED nominal lip-to-wall gap (slot takes the rest)
+CLAMP_SLOT = 1.5         # +/- Z travel of the screw slot (push-to-fit)
+
 BED = (250.0, 250.0, 250.0)  # Bambu P2S 256^3, 250 treated as usable
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "step")
 
@@ -396,6 +411,32 @@ def make_frame():
     return f
 
 
+def make_chassis_clamp(x):
+    """L-hook on top of the bottom jaw at CLAMP_RIB x (assembly coordinates).
+
+    Base plate lies on the jaw top (y = -JAW_GAP) from the jaw's back end to
+    just behind the front wall; the lip rises behind the wall. Screw slot runs
+    in Z over the jaw's thumbscrew hole so the hook can be pushed into contact.
+    """
+    y0 = -JAW_GAP
+    z_lip = -CHASSIS_T - CLAMP_GRIP_CLR              # lip face touching the wall
+    c = box(x - CLAMP_W / 2, x + CLAMP_W / 2, y0, y0 + CLAMP_BASE_T, -JAW_REACH, z_lip)
+    c = c.union(box(x - CLAMP_W / 2, x + CLAMP_W / 2, y0, CLAMP_LIP_H,
+                    z_lip - CLAMP_LIP_T, z_lip))
+    zc = -JAW_REACH / 2 - 1                          # same as the frame's hole
+    s = cq.Workplane("XZ").slot2D(2 * CLAMP_SLOT + M3_CLR, M3_CLR, angle=90) \
+        .extrude(-(CLAMP_BASE_T + 2)).translate((x, y0 - 1, zc))
+    return c.cut(s)
+
+
+def clamp_to_print(wp):
+    """Lay the L on its side (X face down): the L profile prints as a solid
+    outline with no overhangs, layers run along the lip for strength."""
+    s = wp.val().rotate(cq.Vector(0, 0, 0), cq.Vector(0, 1, 0), 90)
+    bb = s.BoundingBox()
+    return s.translate(cq.Vector(-bb.xmin, -bb.ymin, -bb.zmin))
+
+
 def split_frame(f):
     zb, z1 = -JAW_REACH - 1, Z_FRAME1 + 1
     r0, r1 = TOP_Y, TOP_Y + WALL_T
@@ -436,8 +477,12 @@ def make_shaft(p):
 
 
 def make_panel_bits(post_rot):
+    # Open-bottom U channel of CHASSIS_T sheet (bottom is open: the clamps' lips
+    # hook up behind the front wall's bare bottom edge).
     bits = {"chassis": box(0, PANEL_W, 0, PANEL_H, -CHASSIS_D, 0)
-            .edges("|X and >Z").fillet(BEND_R)}
+            .edges("|X and >Z and >Y").fillet(BEND_R)
+            .cut(box(CHASSIS_T, PANEL_W - CHASSIS_T, -1, PANEL_H - CHASSIS_T,
+                     -CHASSIS_D + CHASSIS_T, -CHASSIS_T))}
     for p in PAIRS:
         x, y = p["P"]
         n = cq.Workplane("XY").polygon(6, NUT_AF / math.cos(math.pi / 6)).extrude(NUT_PROUD)
@@ -519,6 +564,8 @@ def main():
     pico = box(PICO_CENTER[0] - 25.5, PICO_CENTER[0] + 25.5, PICO_CENTER[1] - 10.5,
                PICO_CENTER[1] + 10.5, Z_FRAME1, Z_FRAME1 + 8)
     hw["pico2"] = pico
+    for x in CLAMP_RIBS:
+        rig[f"chassis_clamp_{x:.0f}"] = make_chassis_clamp(x)
     panel = make_panel_bits(post_rot)
 
     print("== Bed fit (print orientation)")
@@ -526,6 +573,8 @@ def main():
               "servo_gear": (to_print(sg_local), 7), "pot_gear": (to_print(pg_local), 7)}
     for k, (c, n) in carriers_unique.items():
         prints[k] = (to_print(c), n)
+    prints["chassis_clamp"] = (clamp_to_print(rig[f"chassis_clamp_{CLAMP_RIBS[0]:.0f}"]),
+                               len(CLAMP_RIBS))
     for name, (s, n) in prints.items():
         bb = s.BoundingBox()
         ok(bb.xlen <= BED[0] and bb.ylen <= BED[1] and bb.zlen <= BED[2],
@@ -545,6 +594,20 @@ def main():
             worst.append((na, nb, v))
     ok(not worst, "no overlapping bodies" + "".join(
         f"\n         {a} x {b}: {v:.2f} mm^3" for a, b, v in worst))
+
+    print("== Chassis clamps (hook behind the 1 mm front wall, locked by the jaw screw)")
+    for x in CLAMP_RIBS:
+        cl = rig[f"chassis_clamp_{x:.0f}"]
+        hits = [k for k, s in {**rig, **hw, "chassis": panel["chassis"]}.items()
+                if k != f"chassis_clamp_{x:.0f}" and
+                k.startswith(("frame", "carrier", "servo", "shaft", "chassis"))
+                and vol_overlap(cl, s) > 0.05]
+        ok(not hits, f"clamp at x={x:.0f} clears frame, chassis, carriers, servos and gears"
+           + (f": hits {hits}" if hits else ""))
+    screw = CLAMP_BASE_T + (-JAW_GAP - (BOT_Y - WALL_T))      # head seat to floor underside
+    print(f"  screw path: head on clamp at y={-JAW_GAP + CLAMP_BASE_T:.1f}, insert at "
+          f"y={BOT_Y - WALL_T + 6:.1f}..{BOT_Y - WALL_T:.1f} -> M3 x {math.ceil(screw / 5) * 5:.0f} "
+          f"fully engages the frame insert ({screw:.1f} mm to the floor underside)")
 
     print(f"== Adjustment travel (+/-{ADJUST} mm per pair)")
     grown = {}
@@ -568,7 +631,7 @@ def main():
 
     print("== Writing assembly.step")
     asm = cq.Assembly()
-    colors = {"frame": "gray", "carrier": "orange", "servo_gear": "green",
+    colors = {"frame": "gray", "carrier": "orange", "servo_gear": "green", "chassis_clamp": "red",
               "pot_gear": "yellow", "servo": "blue", "shaft": "white", "pico2": "darkgreen"}
     for k, s in {**rig, **hw, **panel}.items():
         col = next((v for c, v in colors.items() if k.startswith(c)), "black")
