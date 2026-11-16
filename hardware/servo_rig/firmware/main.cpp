@@ -1,18 +1,25 @@
 // Servo rig firmware for a Raspberry Pi Pico or Pico 2 (Pico SDK).
 // Seven SG92R servos on GP0..GP6, driven over USB serial with line commands:
 //   PING                  -> OK servo-rig 2
-//   AT <i> <us>           declare where servo i physically is; starts holding it there
+//   AT <i> <us>           declare where servo i physically is; creeps it on there
 //   SET <i> <us>          ramp servo i (0-6) to a pulse width, finishing from below
 //   MOVE <us0> ... <us6>  ramp all seven together (use - to leave one where it is)
 //   SPEED <us_per_s>      ramp speed (default 150)
-//   OFF [i]               stop pulses (one servo or all); positions are remembered
-//   GET                   -> OK <us0> ... <us6> (0 = position unknown)
+//   OFF [i]               stop pulses (one servo or all); positions are saved to flash
+//   GET                   -> OK <us0> ... <us6> (0 = never set)
 // Every command answers one line: "OK ..." when done (motion settled) or "ERR ...".
 //
 // A hobby servo jumps to any new pulse width at full speed and can't report where it is,
 // so smooth motion has to come from here: every 20 ms each moving servo's pulse advances
 // a little, with acceleration and deceleration. After power-up a servo won't move until
 // AT says where it is, so it can never snap from an unknown position into a pot's end stop.
+//
+// The one moment no ramp can cover is switching a servo's pulses on: it heads for that
+// pulse at full speed from wherever it really is (it may have been turned by hand while
+// off). So every switch-on creeps: isolated single pulses spaced well apart, which an
+// analog servo answers with only a brief, weak nudge each. A servo already in place
+// doesn't move; one that isn't walks back slowly. Positions are saved to flash whenever
+// pulses stop, so after a power cycle the creep target is where the servo was left.
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -21,6 +28,8 @@
 #include <cstring>
 
 #include "hardware/clocks.h"
+#include "hardware/flash.h"
+#include "hardware/sync.h"
 #include "hardware/pwm.h"
 #include "pico/stdlib.h"
 
@@ -35,6 +44,11 @@ constexpr uint16_t kPeriodUs = 20000;
 constexpr int kTickMs = 20;           // one servo frame
 constexpr float kAccel = 600.f;       // us/s^2: reaches full speed in a fraction of a second
 constexpr int kSettleMs = 150;        // after arriving, before answering OK
+constexpr int kCreepPulses = 15;      // single pulses sent when switching a servo on
+constexpr int kCreepGapMs = 200;      // silence between them
+// Saved positions live in the last flash sector.
+constexpr uint32_t kSaveOffset = PICO_FLASH_SIZE_BYTES - FLASH_SECTOR_SIZE;
+constexpr uint32_t kSaveMagic = 0x5345524Fu; // "SERO"
 
 float speed = 150.f;                  // us/s
 float pos[kNumServos] = {};           // last pulse width (0 = unknown)
@@ -43,6 +57,47 @@ bool on[kNumServos] = {};
 
 void Pulse(int i) {
     pwm_set_gpio_level(kPins[i], on[i] ? static_cast<uint16_t>(lroundf(pos[i])) : 0);
+}
+
+// Switch servo i's pulses on at pos[i], creeping (see top of file). No-op if already on.
+void Energize(int i) {
+    if (on[i]) return;
+    const uint16_t level = static_cast<uint16_t>(lroundf(pos[i]));
+    for (int k = 0; k < kCreepPulses; k++) {
+        pwm_set_gpio_level(kPins[i], level);
+        sleep_ms(kTickMs); // the level latches at the period boundary: about one pulse
+        pwm_set_gpio_level(kPins[i], 0);
+        sleep_ms(kCreepGapMs);
+    }
+    on[i] = true;
+    vel[i] = 0.f;
+    Pulse(i);
+}
+
+struct Saved {
+    uint32_t magic;
+    float pos[kNumServos];
+};
+
+void SavePositions() {
+    static uint8_t page[FLASH_PAGE_SIZE];
+    Saved saved{kSaveMagic, {}};
+    std::copy(pos, pos + kNumServos, saved.pos);
+    const auto* old = reinterpret_cast<const Saved*>(XIP_BASE + kSaveOffset);
+    if (!memcmp(old, &saved, sizeof(saved))) return; // spare the flash
+    std::fill(page, page + sizeof(page), 0xFF);
+    memcpy(page, &saved, sizeof(saved));
+    uint32_t irq = save_and_disable_interrupts();
+    flash_range_erase(kSaveOffset, FLASH_SECTOR_SIZE);
+    flash_range_program(kSaveOffset, page, FLASH_PAGE_SIZE);
+    restore_interrupts(irq);
+}
+
+void LoadPositions() {
+    const auto* saved = reinterpret_cast<const Saved*>(XIP_BASE + kSaveOffset);
+    if (saved->magic != kSaveMagic) return;
+    for (int i = 0; i < kNumServos; i++)
+        if (saved->pos[i] >= kUsMin && saved->pos[i] <= kUsMax) pos[i] = saved->pos[i];
 }
 
 // Ramp every servo with a target >= 0 to it, all together, trapezoidal velocity.
@@ -95,7 +150,7 @@ bool Move(const int* targets, char* error) {
     for (int i = 0; i < kNumServos; i++) {
         low[i] = final_[i] = -1.f;
         if (targets[i] < 0) continue;
-        on[i] = true;
+        Energize(i);
         final_[i] = static_cast<float>(targets[i]);
         if (pos[i] >= targets[i]) {
             low[i] = static_cast<float>(std::max(kUsMin, targets[i] - kOvershootUs));
@@ -114,6 +169,7 @@ void Off(int only) {
             vel[i] = 0.f;
             Pulse(i);
         }
+    SavePositions();
 }
 
 void Handle(char* line) {
@@ -145,10 +201,9 @@ void Handle(char* line) {
         int i = atoi(argv[1]), us = atoi(argv[2]);
         if (i < 0 || i >= kNumServos || us < kUsMin || us > kUsMax)
             return (void)puts("ERR bad servo index or pulse width");
+        Off(i);
         pos[i] = static_cast<float>(us);
-        vel[i] = 0.f;
-        on[i] = true;
-        Pulse(i);
+        Energize(i);
         puts("OK");
     } else if (!strcmp(argv[0], "SPEED") && argc == 2) {
         float v = static_cast<float>(atof(argv[1]));
@@ -182,6 +237,7 @@ int main() {
         pwm_init(slice, &cfg, true);
         pwm_set_gpio_level(pin, 0);
     }
+    LoadPositions();
 
     char line[128];
     size_t len = 0;

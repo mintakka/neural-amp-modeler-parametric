@@ -19,7 +19,7 @@ set(CMAKE_CXX_STANDARD 17)
 pico_sdk_init()
 
 add_executable(servo_rig main.cpp)
-target_link_libraries(servo_rig pico_stdlib hardware_pwm hardware_clocks)
+target_link_libraries(servo_rig pico_stdlib hardware_pwm hardware_clocks hardware_flash hardware_sync)
 pico_enable_stdio_usb(servo_rig 1)
 pico_enable_stdio_uart(servo_rig 0)
 pico_add_extra_outputs(servo_rig)

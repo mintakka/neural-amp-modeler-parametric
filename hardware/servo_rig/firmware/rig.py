@@ -43,7 +43,7 @@ def to_servo(knob, us):
 
 
 class Rig:
-    def __init__(self, port=None, timeout=10.0):
+    def __init__(self, port=None, timeout=60.0):
         if port is None:
             ports = sorted(glob.glob("/dev/cu.usbmodem*"))
             if not ports:
