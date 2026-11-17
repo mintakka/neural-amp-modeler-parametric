@@ -166,7 +166,10 @@ OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "step")
 # =============================================================================
 # Derived geometry
 # =============================================================================
-R_SERVO_TIP = MODULE * Z_SERVO / 2 + MODULE
+R_SERVO_TIP = MODULE * (Z_SERVO / 2 + 1 + SHIFT_SERVO)
+# The frame is already printed: it was sized for the original 36-tooth servo gear (tip
+# radius 19.0). Keep its geometry frozen so gear changes are checked against the real frame.
+FRAME_TIP_R = 19.0      # AS PRINTED
 R_POT_TIP = MODULE * Z_POT / 2 + MODULE
 Z_GEAR0 = BUSHING_PROUD + GEAR_GAP          # gear plane back (panel side)
 Z_GEAR1 = Z_GEAR0 + GEAR_FACE
@@ -194,8 +197,8 @@ for i, (px, ang) in enumerate(zip(POST_X, SERVO_ANGLE)):
                       bolts=[(sx + d, sy + sgn * CARRIER_BOLT_DY)
                              for d in (-CARRIER_BOLT_DX, CARRIER_BOLT_DX)],
                       tabholes=[bc + d * SERVO_HOLE_SPACING / 2 for d in (-1, 1)]))
-TOP_Y = max(p["S"][1] for p in PAIRS) + R_SERVO_TIP + GEAR_CLR   # roof bottom
-BOT_Y = min(p["S"][1] for p in PAIRS) - R_SERVO_TIP - GEAR_CLR   # floor top
+TOP_Y = max(p["S"][1] for p in PAIRS) + FRAME_TIP_R + GEAR_CLR   # roof bottom
+BOT_Y = min(p["S"][1] for p in PAIRS) - FRAME_TIP_R - GEAR_CLR   # floor top
 FRAME_X_MAX = max(TOP_RIBS + BOTTOM_RIBS) + RIB_T / 2
 PLATE_X_MIN = min(BOTTOM_RIBS) - RIB_T / 2
 
