@@ -14,7 +14,9 @@ The carrier holds the servo and has a bearing ring that rides on the pot
 gear's hub, so the gear center distance is fixed by the carrier itself.
 Each carrier bolts to the frame through crossed slots (carrier slots run in Y,
 frame slots run in X), so the whole pair can be trimmed +/-ADJUST mm in X and
-Y at assembly. The frame clamps onto the chassis with C-jaws behind the face.
+Y at assembly. The frame hangs on the chassis with C-jaws behind the face: the top
+jaws rest on the chassis top, and M3 pins driven up through the bottom jaws stand
+behind the bare bottom edge of the front wall and capture it.
 """
 import math
 import os
@@ -31,7 +33,7 @@ import cadquery as cq
 PANEL_W = 406.4          # MEASURED  face width (16")
 PANEL_H = 58.7           # MEASURED  face height (2-5/16")
 CHASSIS_D = 182.6        # MEASURED  chassis depth (7-3/16")
-BEND_R = 3.0             # ESTIMATED radius of the rounded face->top/bottom bends
+BEND_R = 3.0             # ESTIMATED radius of the rounded face->top bend (bottom edge is a plain cut)
 JAW_REACH = 22.0         # jaws reach this far behind the face (tubes start ~25)
 
 # --- Pot posts (left -> right) -----------------------------------------------
@@ -129,36 +131,44 @@ ZIP_SLOT = (4.5, 2.0)
 FRAME_T = 4.0
 WALL_T = 8.0             # roof / floor thickness (lapped 4 + 4 at the joint)
 RIB_T = 6.0
-CLAMP_RIB_T = 8.0
+CLAMP_RIB_T = 12.0       # pin ribs: 6.2 head bore + 2.9 mm walls
 GEAR_CLR = 1.5           # clearance from gear tips to frame walls
 LIP_LEN = 12.0           # jaw lip length down/up the face from the bend
-JAW_GAP = 3.0            # bottom jaw to chassis bottom (thumbscrew closes it)
+JAW_GAP = 1.0            # bottom jaw top below the front wall's bare cut edge
 TOP_RIBS = [62.0, 160.0, 239.0, 315.0, 343.0]     # x centers (avoid gears/toggles)
-BOTTOM_RIBS = [62.0, 343.0]
-CLAMP_RIBS = [116.0, 204.0, 280.0]                # bottom jaws with thumbscrews
-FRAME_X_MIN = -9.0       # left end wall (X-stop screw bears on chassis side)
-XSTOP_GAP = 3.0
+BOTTOM_RIBS = [62.0, 345.0]
+CLAMP_RIBS = [122.0, 204.0, 280.0]                # bottom jaws with grip pins (between the bottom gears)
+FRAME_X_MIN = -8.0       # left end wall (X-stop screw bears on chassis side)
+XSTOP_GAP = 2.0
 SPLIT_X = 142.5          # plate butt line between the two frame halves
 LAP = (131.0, 155.0)     # roof/floor lap range
 LAP_BOLTS = [(137.0, -10.0), (149.0, 5.0)]        # (x, z) of M3 bolts along Y
 INSERT_D = 4.0           # M3 heat-set insert hole
+INSERT_DEPTH = 6.0       # insert bore depth
 PICO_CENTER = (27.0, 60.0)   # Raspberry Pi Pico 2 (51 x 21, holes 47 x 11.4, M2)
 PICO_HOLE_D = 2.2
 
-# --- Chassis clamp (x3, one per CLAMP_RIB; replaces the bottom thumbscrews) --
-# The HDRX20 chassis bottom is open, so the bottom jaws have nothing to push on.
-# This L-hook sits on top of each bottom jaw (inside the open bottom), its lip
-# reaches up behind the 1 mm front wall, and an M3 screw dropped through its
-# Z-slot, through the jaw's thumbscrew hole, into the frame's existing insert
-# locks it. Push the hook forward against the wall before tightening: the wall
-# is pinched between this lip (inside) and the frame's jaw lip (outside).
+# --- Chassis grip pins (x3, one per CLAMP_RIB; replace the chassis clamps) ----
+# The HDRX20 chassis bottom is open and the front wall ends in a bare 1 mm cut
+# edge. Nothing rigid can hook behind that edge: the frame has to slide straight
+# on over the chassis top, so anything behind the wall must go in afterwards.
+# An M3x12 socket-cap screw is driven up from the floor underside through each
+# bottom jaw into a heat-set insert at the jaw top. Its head seats on a plastic
+# web under the insert and the last PIN_HOOK mm of shank stands up behind the
+# wall, PIN_CLR behind it: the wall is captured between the jaw lip (outside)
+# and the pin (inside). Hex key from below, no parts inside the chassis.
 CHASSIS_T = 1.0          # MEASURED  sheet thickness of the front wall
-CLAMP_W = CLAMP_RIB_T    # width in X (matches the jaw it sits on)
-CLAMP_BASE_T = 4.0       # ESTIMATED base plate thickness (sits on the jaw top)
-CLAMP_LIP_T = 3.0        # ESTIMATED lip thickness behind the wall
-CLAMP_LIP_H = 8.0        # ESTIMATED lip height above the wall's bottom edge
-CLAMP_GRIP_CLR = 0.1     # ESTIMATED nominal lip-to-wall gap (slot takes the rest)
-CLAMP_SLOT = 1.5         # +/- Z travel of the screw slot (push-to-fit)
+PIN_CLR = 0.3            # pin shank to the inside of the wall
+PIN_SCREW_LEN = 12.0     # M3 socket cap (DIN 912), head 5.5 x 3
+PIN_HEAD_D, PIN_HEAD_H = 5.5, 3.0
+PIN_HEAD_BORE = 6.2      # head/hex-key access bore from the floor underside
+PIN_WEB = 1.5            # plastic between the head seat and the insert (head never loads the insert)
+
+# --- Screws (all M3; MAX_SCREW is checked) -----------------------------------
+MAX_SCREW = 12.0
+XSTOP_SCREW_LEN = 12.0   # + jam nut outside the end wall
+LAP_SCREW_LEN = 12.0     # through roof/floor lap (WALL_T) + 2 washers + nut
+NUT_T, WASHER_T = 2.4, 0.5
 
 BED = (250.0, 250.0, 250.0)  # Bambu P2S 256^3, 250 treated as usable
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "step")
@@ -167,9 +177,7 @@ OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "step")
 # Derived geometry
 # =============================================================================
 R_SERVO_TIP = MODULE * (Z_SERVO / 2 + 1 + SHIFT_SERVO)
-# The frame is already printed: it was sized for the original 36-tooth servo gear (tip
-# radius 19.0). Keep its geometry frozen so gear changes are checked against the real frame.
-FRAME_TIP_R = 19.0      # AS PRINTED
+FRAME_TIP_R = R_SERVO_TIP   # roof/floor sized from the real 41T servo gear (reprinted frame)
 R_POT_TIP = MODULE * Z_POT / 2 + MODULE
 Z_GEAR0 = BUSHING_PROUD + GEAR_GAP          # gear plane back (panel side)
 Z_GEAR1 = Z_GEAR0 + GEAR_FACE
@@ -184,6 +192,13 @@ Z_CARRIER0 = Z_CARRIER1 - CARRIER_T
 Z_FRAME1 = Z_CARRIER0
 Z_FRAME0 = Z_FRAME1 - FRAME_T
 HUB_TOP = Z_CARRIER1 - 0.4
+PIN_Z = -(CHASSIS_T + PIN_CLR + 1.5)                # pin axis behind the face
+PIN_SEAT_Y = -JAW_GAP - INSERT_DEPTH - PIN_WEB       # head seat (web under the insert)
+PIN_TIP_Y = PIN_SEAT_Y + PIN_SCREW_LEN
+PIN_HOOK = PIN_TIP_Y                                 # shank above the wall's cut edge (y=0)
+SCREWS = [("carrier bolts", 8.0, 14), ("pot gear grub screws", 8.0, 7),
+          ("chassis grip pins", PIN_SCREW_LEN, 3), ("X-stop", XSTOP_SCREW_LEN, 1),
+          ("lap bolts", LAP_SCREW_LEN, 4)]        # (use, M3 length, qty)
 POST_TIP = NUT_PROUD + POST_LEN
 
 PAIRS = []
@@ -384,7 +399,6 @@ def make_frame():
     f = f.union(box(FRAME_X_MIN, FRAME_X_MIN + RIB_T, PICO_CENTER[1] - 16, roof1,
                     zb, z1))                                                # end wall
     relief_top = cyl_x(PANEL_H, 0, BEND_R + 1, -50, 500)
-    relief_bot = cyl_x(0, 0, BEND_R + 1, -50, 500)
     for x in TOP_RIBS:              # top C-jaws: rest on chassis top, lip on face
         r = box(x - RIB_T / 2, x + RIB_T / 2, PANEL_H, roof0 + 1, zb, 0.01)
         r = r.union(box(x - RIB_T / 2, x + RIB_T / 2, PANEL_H - LIP_LEN, roof0 + 1, 0, z1))
@@ -392,11 +406,11 @@ def make_frame():
     for x, t in [(x, RIB_T) for x in BOTTOM_RIBS] + [(x, CLAMP_RIB_T) for x in CLAMP_RIBS]:
         r = box(x - t / 2, x + t / 2, flo1 - 1, -JAW_GAP, zb, 0.01)
         r = r.union(box(x - t / 2, x + t / 2, flo1 - 1, LIP_LEN, 0, z1))
-        f = f.union(r.cut(relief_bot))
-    for x in CLAMP_RIBS:            # thumbscrew holes + insert in floor underside
-        zc = -JAW_REACH / 2 - 1
-        f = f.cut(cyl_y(x, zc, M3_CLR / 2, flo0 - 1, 1))
-        f = f.cut(cyl_y(x, zc, INSERT_D / 2, flo0 - 1, flo0 + 6))
+        f = f.union(r)
+    for x in CLAMP_RIBS:            # grip pin: head bore from below, insert at the jaw top
+        f = f.cut(cyl_y(x, PIN_Z, PIN_HEAD_BORE / 2, flo0 - 1, PIN_SEAT_Y))
+        f = f.cut(cyl_y(x, PIN_Z, M3_CLR / 2, PIN_SEAT_Y - 1, -JAW_GAP - INSERT_DEPTH))
+        f = f.cut(cyl_y(x, PIN_Z, INSERT_D / 2, -JAW_GAP - INSERT_DEPTH, -JAW_GAP + 1))
     # X-stop: insert through the end wall, screw tip bears on the chassis side
     f = f.cut(cyl_x(PANEL_H - 7, -JAW_REACH / 2, INSERT_D / 2, FRAME_X_MIN - 1,
                     FRAME_X_MIN + RIB_T + 1))
@@ -419,32 +433,6 @@ def make_frame():
             f = f.cut(cyl_z(PICO_CENTER[0] + dx, PICO_CENTER[1] + dy,
                             PICO_HOLE_D / 2, z0 - 1, z1 + 1))
     return f
-
-
-def make_chassis_clamp(x):
-    """L-hook on top of the bottom jaw at CLAMP_RIB x (assembly coordinates).
-
-    Base plate lies on the jaw top (y = -JAW_GAP) from the jaw's back end to
-    just behind the front wall; the lip rises behind the wall. Screw slot runs
-    in Z over the jaw's thumbscrew hole so the hook can be pushed into contact.
-    """
-    y0 = -JAW_GAP
-    z_lip = -CHASSIS_T - CLAMP_GRIP_CLR              # lip face touching the wall
-    c = box(x - CLAMP_W / 2, x + CLAMP_W / 2, y0, y0 + CLAMP_BASE_T, -JAW_REACH, z_lip)
-    c = c.union(box(x - CLAMP_W / 2, x + CLAMP_W / 2, y0, CLAMP_LIP_H,
-                    z_lip - CLAMP_LIP_T, z_lip))
-    zc = -JAW_REACH / 2 - 1                          # same as the frame's hole
-    s = cq.Workplane("XZ").slot2D(2 * CLAMP_SLOT + M3_CLR, M3_CLR, angle=90) \
-        .extrude(-(CLAMP_BASE_T + 2)).translate((x, y0 - 1, zc))
-    return c.cut(s)
-
-
-def clamp_to_print(wp):
-    """Lay the L on its side (X face down): the L profile prints as a solid
-    outline with no overhangs, layers run along the lip for strength."""
-    s = wp.val().rotate(cq.Vector(0, 0, 0), cq.Vector(0, 1, 0), 90)
-    bb = s.BoundingBox()
-    return s.translate(cq.Vector(-bb.xmin, -bb.ymin, -bb.zmin))
 
 
 def split_frame(f):
@@ -487,8 +475,8 @@ def make_shaft(p):
 
 
 def make_panel_bits(post_rot):
-    # Open-bottom U channel of CHASSIS_T sheet (bottom is open: the clamps' lips
-    # hook up behind the front wall's bare bottom edge).
+    # Open-bottom U channel of CHASSIS_T sheet (bottom is open: the grip pins
+    # stand up behind the front wall's bare bottom edge).
     bits = {"chassis": box(0, PANEL_W, 0, PANEL_H, -CHASSIS_D, 0)
             .edges("|X and >Z and >Y").fillet(BEND_R)
             .cut(box(CHASSIS_T, PANEL_W - CHASSIS_T, -1, PANEL_H - CHASSIS_T,
@@ -574,8 +562,9 @@ def main():
     pico = box(PICO_CENTER[0] - 25.5, PICO_CENTER[0] + 25.5, PICO_CENTER[1] - 10.5,
                PICO_CENTER[1] + 10.5, Z_FRAME1, Z_FRAME1 + 8)
     hw["pico2"] = pico
-    for x in CLAMP_RIBS:
-        rig[f"chassis_clamp_{x:.0f}"] = make_chassis_clamp(x)
+    for x in CLAMP_RIBS:            # grip pins (M3 socket cap, modeled for the clearance checks)
+        hw[f"pin_{x:.0f}"] = cyl_y(x, PIN_Z, 1.5, PIN_SEAT_Y, PIN_TIP_Y).union(
+            cyl_y(x, PIN_Z, PIN_HEAD_D / 2, PIN_SEAT_Y - PIN_HEAD_H, PIN_SEAT_Y))
     panel = make_panel_bits(post_rot)
 
     print("== Bed fit (print orientation)")
@@ -583,14 +572,22 @@ def main():
               "servo_gear": (to_print(sg_local), 7), "pot_gear": (to_print(pg_local), 7)}
     for k, (c, n) in carriers_unique.items():
         prints[k] = (to_print(c), n)
-    prints["chassis_clamp"] = (clamp_to_print(rig[f"chassis_clamp_{CLAMP_RIBS[0]:.0f}"]),
-                               len(CLAMP_RIBS))
     for name, (s, n) in prints.items():
         bb = s.BoundingBox()
         ok(bb.xlen <= BED[0] and bb.ylen <= BED[1] and bb.zlen <= BED[2],
            f"{name} x{n}: {bb.xlen:.0f} x {bb.ylen:.0f} x {bb.zlen:.0f} mm, "
            f"{len(s.Solids())} solid(s)")
         cq.exporters.export(cq.Workplane().add(s), os.path.join(OUT, f"{name}.step"))
+
+    print("== Gear clearance to the frame (tips grown by GEAR_CLR)")
+    for p in PAIRS:
+        i, (sx, sy), (px, py) = p["i"], p["S"], p["P"]
+        gs = cyl_z(sx, sy, R_SERVO_TIP + GEAR_CLR, Z_GEAR0, Z_GEAR1)
+        gp = cyl_z(px, py, R_POT_TIP + GEAR_CLR, Z_GEAR0, Z_GEAR1)
+        hits = [k for k, s in rig.items() if k.startswith("frame") and
+                (vol_overlap(gs, s) > 0.01 or vol_overlap(gp, s) > 0.01)]
+        ok(not hits, f"pair {i} gears keep {GEAR_CLR} mm from the frame"
+           + (f": hits {hits}" if hits else ""))
 
     print("== Collisions (all part pairs, incl. meshing gears and placeholders)")
     bodies = {**rig, **hw, **panel}
@@ -605,19 +602,33 @@ def main():
     ok(not worst, "no overlapping bodies" + "".join(
         f"\n         {a} x {b}: {v:.2f} mm^3" for a, b, v in worst))
 
-    print("== Chassis clamps (hook behind the 1 mm front wall, locked by the jaw screw)")
+    print("== Chassis grip pins (M3x12 from below, shank behind the bare front-wall edge)")
+    ok(PIN_HOOK >= 3.0, f"pin stands {PIN_HOOK:.1f} mm above the wall's cut edge "
+       f"(seat y={PIN_SEAT_Y:.1f}, jaw top y={-JAW_GAP:.1f}, tip y={PIN_TIP_Y:.1f})")
+    ok(PIN_Z + 1.5 <= -CHASSIS_T - 0.2, f"pin shank {-(PIN_Z + 1.5) - CHASSIS_T:.2f} mm behind the wall")
+    ok((CLAMP_RIB_T - PIN_HEAD_BORE) / 2 >= 2.5,
+       f"{(CLAMP_RIB_T - PIN_HEAD_BORE) / 2:.2f} mm walls around the {PIN_HEAD_BORE} mm head bore")
     for x in CLAMP_RIBS:
-        cl = rig[f"chassis_clamp_{x:.0f}"]
+        pin = hw[f"pin_{x:.0f}"]
         hits = [k for k, s in {**rig, **hw, "chassis": panel["chassis"]}.items()
-                if k != f"chassis_clamp_{x:.0f}" and
-                k.startswith(("frame", "carrier", "servo", "shaft", "chassis"))
-                and vol_overlap(cl, s) > 0.05]
-        ok(not hits, f"clamp at x={x:.0f} clears frame, chassis, carriers, servos and gears"
+                if k != f"pin_{x:.0f}" and
+                k.startswith(("frame", "carrier", "servo", "shaft", "chassis", "pot"))
+                and vol_overlap(pin, s) > 0.05]
+        ok(not hits, f"pin at x={x:.0f} clears frame, chassis, carriers, servos and gears"
            + (f": hits {hits}" if hits else ""))
-    screw = CLAMP_BASE_T + (-JAW_GAP - (BOT_Y - WALL_T))      # head seat to floor underside
-    print(f"  screw path: head on clamp at y={-JAW_GAP + CLAMP_BASE_T:.1f}, insert at "
-          f"y={BOT_Y - WALL_T + 6:.1f}..{BOT_Y - WALL_T:.1f} -> M3 x {math.ceil(screw / 5) * 5:.0f} "
-          f"fully engages the frame insert ({screw:.1f} mm to the floor underside)")
+    print(f"  hex key reach from the floor underside to the pin head: "
+          f"{PIN_SEAT_Y - PIN_HEAD_H - (BOT_Y - WALL_T):.1f} mm")
+
+    print(f"== Screws (every M3 <= {MAX_SCREW:.0f} mm)")
+    for use, ln, n in SCREWS:
+        ok(ln <= MAX_SCREW, f"{n} x M3x{ln:.0f}: {use}")
+    lap_stack = WALL_T + 2 * WASHER_T + NUT_T
+    ok(lap_stack <= LAP_SCREW_LEN, f"lap bolt stack {lap_stack:.1f} mm <= M3x{LAP_SCREW_LEN:.0f}")
+    reach = XSTOP_SCREW_LEN - NUT_T - RIB_T
+    ok(reach >= XSTOP_GAP + 1.0, f"X-stop M3x{XSTOP_SCREW_LEN:.0f} + jam nut reaches {reach:.1f} mm "
+       f"past the end wall (gap {XSTOP_GAP:.0f} mm)")
+    print(f"  inserts: {len(CLAMP_RIBS)} at the bottom jaw tops + 1 in the end wall, "
+          f"bore {INSERT_D} mm x {INSERT_DEPTH:.0f} deep")
 
     print(f"== Adjustment travel (+/-{ADJUST} mm per pair)")
     grown = {}
@@ -641,7 +652,7 @@ def main():
 
     print("== Writing assembly.step")
     asm = cq.Assembly()
-    colors = {"frame": "gray", "carrier": "orange", "servo_gear": "green", "chassis_clamp": "red",
+    colors = {"frame": "gray", "carrier": "orange", "servo_gear": "green", "pin": "red",
               "pot_gear": "yellow", "servo": "blue", "shaft": "white", "pico2": "darkgreen"}
     for k, s in {**rig, **hw, **panel}.items():
         col = next((v for c, v in colors.items() if k.startswith(c)), "black")
