@@ -135,14 +135,19 @@ CLAMP_RIB_T = 12.0       # pin ribs: 6.2 head bore + 2.9 mm walls
 GEAR_CLR = 1.5           # clearance from gear tips to frame walls
 LIP_LEN = 12.0           # jaw lip length down/up the face from the bend
 JAW_GAP = 1.0            # bottom jaw top below the front wall's bare cut edge
-TOP_RIBS = [62.0, 160.0, 239.0, 315.0, 343.0]     # x centers (avoid gears/toggles)
+TOP_RIBS = [62.0, 160.0, 239.0, 315.0, 343.0, 396.0]   # x centers (avoid gears/toggles/jack)
 BOTTOM_RIBS = [62.0, 345.0]
 CLAMP_RIBS = [122.0, 204.0, 280.0]                # bottom jaws with grip pins (between the bottom gears)
-FRAME_X_MIN = -8.0       # left end wall (X-stop screw bears on chassis side)
-XSTOP_GAP = 2.0
-SPLIT_X = 142.5          # plate butt line between the two frame halves
-LAP = (131.0, 155.0)     # roof/floor lap range
-LAP_BOLTS = [(137.0, -10.0), (149.0, 5.0)]        # (x, z) of M3 bolts along Y
+XSTOP_GAP = 1.5          # end wall inner face to chassis side, each end (the X-stop screws close it)
+EXT_Y0 = 44.0            # plate extensions to the end walls start here (Pico left, jack kept open right)
+# Split: the plate butt line steps (x=SPLIT_BOT below SPLIT_JOG_Y, x=SPLIT_TOP above),
+# through the Middle pair's servo opening and the HMG window, clear of the pair 2/3/4
+# bolt grooves. Roof and floor laps sit around their own butt x.
+SPLIT_BOT, SPLIT_TOP, SPLIT_JOG_Y = 189.0, 220.0, 45.0
+LAP_BOT = (178.0, 198.0)                          # floor lap range (clear of the 204 pin rib)
+LAP_TOP = (208.0, 232.0)                          # roof lap range (clear of the 239 rib)
+LAP_BOLTS_BOT = [(183.0, -10.0), (193.0, 5.0)]    # (x, z) of M3 bolts along Y through the floor
+LAP_BOLTS_TOP = [(214.0, -10.0), (226.0, 5.0)]    # ... through the roof
 INSERT_D = 4.0           # M3 heat-set insert hole
 INSERT_DEPTH = 6.0       # insert bore depth
 PICO_CENTER = (27.0, 60.0)   # Raspberry Pi Pico 2 (51 x 21, holes 47 x 11.4, M2)
@@ -197,7 +202,7 @@ PIN_SEAT_Y = -JAW_GAP - INSERT_DEPTH - PIN_WEB       # head seat (web under the 
 PIN_TIP_Y = PIN_SEAT_Y + PIN_SCREW_LEN
 PIN_HOOK = PIN_TIP_Y                                 # shank above the wall's cut edge (y=0)
 SCREWS = [("carrier bolts", 8.0, 14), ("pot gear grub screws", 8.0, 7),
-          ("chassis grip pins", PIN_SCREW_LEN, 3), ("X-stop", XSTOP_SCREW_LEN, 1),
+          ("chassis grip pins", PIN_SCREW_LEN, 3), ("X-stops", XSTOP_SCREW_LEN, 2),
           ("lap bolts", LAP_SCREW_LEN, 4)]        # (use, M3 length, qty)
 POST_TIP = NUT_PROUD + POST_LEN
 
@@ -214,8 +219,10 @@ for i, (px, ang) in enumerate(zip(POST_X, SERVO_ANGLE)):
                       tabholes=[bc + d * SERVO_HOLE_SPACING / 2 for d in (-1, 1)]))
 TOP_Y = max(p["S"][1] for p in PAIRS) + FRAME_TIP_R + GEAR_CLR   # roof bottom
 BOT_Y = min(p["S"][1] for p in PAIRS) - FRAME_TIP_R - GEAR_CLR   # floor top
-FRAME_X_MAX = max(TOP_RIBS + BOTTOM_RIBS) + RIB_T / 2
-PLATE_X_MIN = min(BOTTOM_RIBS) - RIB_T / 2
+FRAME_X_MIN = -XSTOP_GAP - RIB_T                  # left end wall outer face
+FRAME_X_MAX = PANEL_W + XSTOP_GAP + RIB_T         # right end wall outer face
+PLATE_X_MIN = min(BOTTOM_RIBS) - RIB_T / 2        # full-height plate and floor span
+PLATE_X_MAX = max(BOTTOM_RIBS) + RIB_T / 2
 
 
 # =============================================================================
@@ -392,12 +399,13 @@ def make_frame():
     z0, z1, zb = Z_FRAME0, Z_FRAME1, -JAW_REACH
     roof0, roof1 = TOP_Y, TOP_Y + WALL_T
     flo1, flo0 = BOT_Y, BOT_Y - WALL_T
-    f = box(PLATE_X_MIN, FRAME_X_MAX, flo0, roof1, z0, z1)
-    f = f.union(box(FRAME_X_MIN, PLATE_X_MIN + 1, PICO_CENTER[1] - 16, roof1, z0, z1))
+    f = box(PLATE_X_MIN, PLATE_X_MAX, flo0, roof1, z0, z1)
+    f = f.union(box(FRAME_X_MIN, PLATE_X_MIN + 1, EXT_Y0, roof1, z0, z1))   # Pico extension
+    f = f.union(box(PLATE_X_MAX - 1, FRAME_X_MAX, EXT_Y0, roof1, z0, z1))   # right extension
     f = f.union(box(FRAME_X_MIN, FRAME_X_MAX, roof0, roof1, zb, z1))        # roof
-    f = f.union(box(PLATE_X_MIN, FRAME_X_MAX, flo0, flo1, zb, z1))          # floor
-    f = f.union(box(FRAME_X_MIN, FRAME_X_MIN + RIB_T, PICO_CENTER[1] - 16, roof1,
-                    zb, z1))                                                # end wall
+    f = f.union(box(PLATE_X_MIN, PLATE_X_MAX, flo0, flo1, zb, z1))          # floor
+    for xw in (FRAME_X_MIN, FRAME_X_MAX - RIB_T):                           # end walls
+        f = f.union(box(xw, xw + RIB_T, EXT_Y0, roof1, zb, z1))
     relief_top = cyl_x(PANEL_H, 0, BEND_R + 1, -50, 500)
     for x in TOP_RIBS:              # top C-jaws: rest on chassis top, lip on face
         r = box(x - RIB_T / 2, x + RIB_T / 2, PANEL_H, roof0 + 1, zb, 0.01)
@@ -411,9 +419,9 @@ def make_frame():
         f = f.cut(cyl_y(x, PIN_Z, PIN_HEAD_BORE / 2, flo0 - 1, PIN_SEAT_Y))
         f = f.cut(cyl_y(x, PIN_Z, M3_CLR / 2, PIN_SEAT_Y - 1, -JAW_GAP - INSERT_DEPTH))
         f = f.cut(cyl_y(x, PIN_Z, INSERT_D / 2, -JAW_GAP - INSERT_DEPTH, -JAW_GAP + 1))
-    # X-stop: insert through the end wall, screw tip bears on the chassis side
-    f = f.cut(cyl_x(PANEL_H - 7, -JAW_REACH / 2, INSERT_D / 2, FRAME_X_MIN - 1,
-                    FRAME_X_MIN + RIB_T + 1))
+    # X-stops: insert through each end wall, screw tip bears on the chassis side
+    for xw in (FRAME_X_MIN, FRAME_X_MAX - RIB_T):
+        f = f.cut(cyl_x(PANEL_H - 7, -JAW_REACH / 2, INSERT_D / 2, xw - 1, xw + RIB_T + 1))
     # pair openings, carrier bolt slots (along X) + sliding nut grooves
     for p in PAIRS:
         sx, sy = p["S"]
@@ -440,16 +448,23 @@ def split_frame(f):
     r0, r1 = TOP_Y, TOP_Y + WALL_T
     b0, b1 = BOT_Y - WALL_T, BOT_Y
     rm, bm = (r0 + r1) / 2, (b0 + b1) / 2
-    inner = box(SPLIT_X, LAP[1], r0, rm, zb, z1).union(box(SPLIT_X, LAP[1], bm, b1, zb, z1))
-    outer = box(LAP[0], SPLIT_X, rm, r1, zb, z1).union(box(LAP[0], SPLIT_X, b0, bm, zb, z1))
-    inner_i = f.intersect(box(SPLIT_X, LAP[1], r0, rm, zb, z1)
-                          .union(box(SPLIT_X, LAP[1], bm, b1, zb, z1)))
-    outer_i = f.intersect(box(LAP[0], SPLIT_X, rm, r1, zb, z1)
-                          .union(box(LAP[0], SPLIT_X, b0, bm, zb, z1)))
-    left = f.intersect(box(-100, SPLIT_X, -200, 200, zb, z1)).cut(outer).union(inner_i)
-    right = f.intersect(box(SPLIT_X, 600, -200, 200, zb, z1)).cut(inner).union(outer_i)
-    for x, z in LAP_BOLTS:
-        h = cyl_y(x, z, M3_CLR / 2, b0 - 1, r1 + 1)
+    # everything left of the stepped plate butt line
+    left_side = box(-100, SPLIT_BOT, -200, SPLIT_JOG_Y, zb, z1).union(
+        box(-100, SPLIT_TOP, SPLIT_JOG_Y, 200, zb, z1))
+    right_side = box(-100, 600, -200, 200, zb, z1).cut(left_side)
+    # lap tongues: the left half keeps the inner halves (roof bottom, floor top) out to
+    # LAP_*[1]; the right half keeps the outer halves back to LAP_*[0]
+    inner = box(SPLIT_TOP, LAP_TOP[1], r0, rm, zb, z1).union(
+        box(SPLIT_BOT, LAP_BOT[1], bm, b1, zb, z1))
+    outer = box(LAP_TOP[0], SPLIT_TOP, rm, r1, zb, z1).union(
+        box(LAP_BOT[0], SPLIT_BOT, b0, bm, zb, z1))
+    left = f.intersect(left_side).cut(outer).union(f.intersect(inner))
+    right = f.intersect(right_side).cut(inner).union(f.intersect(outer))
+    for x, z in LAP_BOLTS_TOP:
+        h = cyl_y(x, z, M3_CLR / 2, r0 - 1, r1 + 1)
+        left, right = left.cut(h), right.cut(h)
+    for x, z in LAP_BOLTS_BOT:
+        h = cyl_y(x, z, M3_CLR / 2, b0 - 1, b1 + 1)
         left, right = left.cut(h), right.cut(h)
     return left, right
 
@@ -625,9 +640,13 @@ def main():
     lap_stack = WALL_T + 2 * WASHER_T + NUT_T
     ok(lap_stack <= LAP_SCREW_LEN, f"lap bolt stack {lap_stack:.1f} mm <= M3x{LAP_SCREW_LEN:.0f}")
     reach = XSTOP_SCREW_LEN - NUT_T - RIB_T
-    ok(reach >= XSTOP_GAP + 1.0, f"X-stop M3x{XSTOP_SCREW_LEN:.0f} + jam nut reaches {reach:.1f} mm "
-       f"past the end wall (gap {XSTOP_GAP:.0f} mm)")
-    print(f"  inserts: {len(CLAMP_RIBS)} at the bottom jaw tops + 1 in the end wall, "
+    ok(reach >= 2 * XSTOP_GAP, f"each X-stop (M3x{XSTOP_SCREW_LEN:.0f} + jam nut) reaches {reach:.1f} mm "
+       f"past its end wall: covers the whole {2 * XSTOP_GAP:.0f} mm side slack, frame adjustable "
+       f"+/-{XSTOP_GAP:.1f} mm")
+    ok(abs(FRAME_X_MIN + RIB_T + XSTOP_GAP) < 1e-9 and abs(FRAME_X_MAX - RIB_T - XSTOP_GAP - PANEL_W) < 1e-9,
+       f"end walls wrap the {PANEL_W:.1f} mm chassis with {XSTOP_GAP:.1f} mm a side "
+       f"(frame x {FRAME_X_MIN:.1f}..{FRAME_X_MAX:.1f})")
+    print(f"  inserts: {len(CLAMP_RIBS)} at the bottom jaw tops + 2 in the end walls, "
           f"bore {INSERT_D} mm x {INSERT_DEPTH:.0f} deep")
 
     print(f"== Adjustment travel (+/-{ADJUST} mm per pair)")

@@ -17,17 +17,22 @@ servos and output shafts.
   and frame slots run in X, with sliding nut grooves on the back of the frame. Each
   pair can be trimmed **±3 mm in X and Y** at assembly, so post position errors are
   fixed by adjusting instead of reprinting.
-- **Frame**: a plate with a roof and floor, made as two halves joined by 4 + 4 mm lap joints
-  in the roof and floor (4 × M3). C-jaws hang it on the chassis just behind the face
+- **Frame**: a plate with a roof and floor spanning the full 406.4 mm chassis, made as two
+  halves joined by 4 + 4 mm lap joints in the roof and floor (4 × M3; the plate butt line
+  steps through the Middle pair's servo opening and the HMG window so no bolt groove is cut).
+  C-jaws hang it on the chassis just behind the face
   (≤22 mm back, clear of the tubes). The top jaws rest on the chassis top and the lips
   sit on the face, with a relief for the rounded top bend. The chassis bottom is open
   and the front wall ends in a bare 1 mm cut edge (no flange), so nothing rigid can hook
   behind it: the frame slides straight on, and three **grip pins** go in afterwards. Each is an
   M3x12 driven up from under the frame floor through a bottom jaw into a heat-set insert at
   the jaw top; its last 3.5 mm of shank stands 0.3 mm behind the wall, so the wall is captured
-  between the jaw lip (outside) and the pin (inside). A screw in the left end wall sets
-  X against the chassis side. Finger windows sit over the HMG and Bright toggles. The
-  power switch, LED and input jack lie outside the frame.
+  between the jaw lip (outside) and the pin (inside). End walls wrap both chassis sides with
+  1.5 mm to spare, and an M3x12 set screw through each (heat-set insert + jam nut) bears on
+  the chassis side, so the frame is held between the two and can be shifted ±1.5 mm. Finger windows sit over the HMG and Bright toggles. The
+  power switch and LED lie outside the frame; the right end carries only the roof and a plate
+  strip above y = 44 mm, so the input jack (keep-out r 12 mm at post height) stays in open
+  space with 7 mm to spare above it.
 - Servo gears alternate below and above the post row. The top ones are swung 30° left
   (`SERVO_ANGLE`) to keep the toggles clear.
 - **The frame reaches about 34 mm below the chassis bottom**, and the grip pins are
@@ -58,15 +63,15 @@ Rebuild with `python pot_gear_rev7.py`.
 | `servo_gear.step` | 7 | gear face down, spline hub up |
 | `pot_gear.step` | 7 | gear face down, hub up |
 
-Largest part is 217 × 114 × 38 mm. Gears and carriers can share plates.
+The halves are 240 and 236 × 114 × 38 mm. Gears and carriers can share plates.
 
 ## Hardware
-- **M3 (29 screws, 26 nuts, 4 heat-set inserts, 22 washers):**
+- **M3 (30 screws, 27 nuts, 5 heat-set inserts, 22 washers):**
   - 14 × M3x8 + washer + nut: carriers to frame (nuts slide in the frame grooves)
   - 7 × M3x6–8 grub screw + nut: pot gear set screws (nut trap in the hub)
   - 3 × M3x12 SHCS + insert (bore 4.0 mm × 6 deep, pressed into the top of each bottom
     jaw): chassis grip pins, driven up from under the frame floor
-  - 1 × M3x12 + insert (bore 4.0 mm, through the left end wall) + jam nut: X stop
+  - 2 × M3x12 + insert (bore 4.0 mm, through each end wall) + jam nut: X stops, one per side
   - 4 × M3x12 + 2 washers + nut: frame lap joint
   - No M3 screw in the rig is longer than 12 mm (checked by the script).
 - **M2:** 4 × M2 screw, nut and 5 mm standoff for the Pico 2.
@@ -86,7 +91,7 @@ first. If your servos measure larger than 4.8 mm over the spline (some clones ru
 - Zip ties (≤4 mm). Each carrier has a slot pair beside its servo.
 
 ## Assembly
-1. Press the 4 inserts in (1 in the top of each of the 3 wide bottom jaws, 1 in the left end wall).
+1. Press the 5 inserts in (1 in the top of each of the 3 wide bottom jaws, 1 through each end wall).
 2. Bolt the frame halves together at the roof and floor laps.
 3. Center each servo electrically at 90°. Press its servo gear onto the spline (hub
    first) and drive the center screw through the gear into the shaft.
@@ -95,7 +100,9 @@ first. If your servos measure larger than 4.8 mm over the spline (some clones ru
 5. On the amp, set each pot to mid-travel. Slide a pot gear onto each post until it
    touches the bushing, back it off about 0.5 mm (use a paper shim), and tighten the grub screw on the flat.
 6. Offer the frame up: the top jaws go over the chassis top and the carrier rings slide over the
-   pot gear hubs while the gears mesh. Push the frame in and left against the X-stop screw.
+   pot gear hubs while the gears mesh. Push the frame in, centre it between the chassis sides,
+   and run both X-stop screws in against the sides (then set the jam nuts). Each reaches across
+   the whole 3 mm of side slack, so the frame can be biased either way.
    Then, from under the frame floor, drop an M3x12 into each of the three 6.2 mm bores in
    the wide bottom jaws and drive it up with a 2.5 mm hex key until the head seats (about
    22 mm up the bore). The shank now stands behind the front wall's bottom edge and the
