@@ -32,6 +32,19 @@ servos and output shafts.
 - **The frame reaches about 32 mm below the chassis bottom**, so stand the amp on
   ≥40 mm risers or let the front overhang the table edge by about 30 mm.
 
+## Pot gear: print `step/pot_gear_rev7.step`
+
+`pot_gear_rev7.step` replaces the generated `pot_gear.step`. It is the user's hand-edited rev6
+gear (`step/source/pot_gear_rev6.step`) with its 20 teeth swapped for the 15-tooth,
+profile-shifted 41:15 teeth. Everything else is exactly as rev6:
+- the plain section that fits through the carrier
+- the D-bore and the set-screw nut trap
+- the inner circular cutout at the amp-face end
+
+The teeth run the same 14.75 mm as rev6. The 15-tooth roots (6.6 mm) are smaller than that
+cutout (7.2 mm), so over its last 5.6 mm the teeth are open ribs anchored to the solid part.
+Rebuild with `python pot_gear_rev7.py`.
+
 ## Print list (PETG, 0.2 mm layers, 4 walls; 26 prints, no supports)
 - `chassis_clamp` × 3 (21 × 11 × 8 mm, prints on its side as exported; ~2 g each)
 | STEP file | Qty | Orientation |
