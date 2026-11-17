@@ -61,9 +61,14 @@ TOGGLE_WINDOW_R = 12.0   # finger windows in the frame plate
 
 # --- Gears (servo gear big, pot gear small -> step-up) -----------------------
 MODULE = 1.0
-Z_SERVO = 36
-Z_POT = 20
+Z_SERVO = 41           # 41:15 = 2.73:1. Our SG92Rs travel only ~115 deg, so the pot needs more step-up
+Z_POT = 15
 CENTER_DIST = 28.0       # must equal MODULE*(Z_SERVO+Z_POT)/2 (checked)
+# Profile shift (x * MODULE): a 15-tooth pinion is below the 17-tooth undercut limit, so
+# the pot gear's teeth are shifted outward and the servo gear's inward by the same amount.
+# Equal and opposite shifts keep the 28 mm centre distance (the printed carriers set it).
+SHIFT_POT = 0.35
+SHIFT_SERVO = -SHIFT_POT
 PRESSURE_ANGLE = 20.0
 BACKLASH = 0.18          # total circular backlash, split between the 2 gears
 GEAR_FACE = 4.0          # face width, both gears share one plane
@@ -258,13 +263,14 @@ def to_print(wp, flip=False):
 # =============================================================================
 # Involute gear
 # =============================================================================
-def involute_gear(z, m, face, backlash, pa_deg=PRESSURE_ANGLE, n=10):
-    """Spur gear, tooth 0 centered on +X, face from z=0 to z=face."""
+def involute_gear(z, m, face, backlash, shift=0.0, pa_deg=PRESSURE_ANGLE, n=10):
+    """Spur gear with profile shift `shift` (x), tooth 0 centered on +X, face z=0..face."""
     pa = math.radians(pa_deg)
     r, rb = m * z / 2, m * z / 2 * math.cos(pa)
-    ra, rf = r + m, r - 1.25 * m
+    ra, rf = r + m * (1 + shift), r - m * (1.25 - shift)
     inv = lambda a: math.tan(a) - a
-    psi = (math.pi * m / 2 - backlash / 2) / (2 * r)     # half tooth angle @ pitch
+    s_pitch = math.pi * m / 2 + 2 * shift * m * math.tan(pa)   # tooth thickness @ pitch
+    psi = (s_pitch - backlash / 2) / (2 * r)             # half tooth angle @ pitch
     th = lambda rho: psi + inv(pa) - inv(math.acos(min(1.0, rb / rho)))
     r0 = max(rb, rf)
     radii = [r0 + (ra - r0) * k / n for k in range(n + 1)]
@@ -295,7 +301,7 @@ def spline_profile(r_root, r_tip, n, z0, z1):
 def make_servo_gear():
     """Local z=0 is the panel-side (screw) face; hub points at the servo."""
     o = Z_GEAR0
-    g = involute_gear(Z_SERVO, MODULE, GEAR_FACE, BACKLASH)
+    g = involute_gear(Z_SERVO, MODULE, GEAR_FACE, BACKLASH, SHIFT_SERVO)
     g = g.union(cyl_z(0, 0, SPLINE_HUB_D / 2, 0, Z_SG_HUB_END - o))
     g = g.cut(spline_profile(SPLINE_OD / 2 + SPLINE_FIT,
                              SPLINE_OD / 2 - SPLINE_TOOTH_H + SPLINE_FIT,
@@ -312,9 +318,10 @@ def d_profile(r, flat_dist, z0, z1):
 
 def make_pot_gear():
     """Local z=0 is the panel-side face. Flat of the D faces -Y (set screw)."""
-    g = involute_gear(Z_POT, MODULE, GEAR_FACE, BACKLASH)
+    g = involute_gear(Z_POT, MODULE, GEAR_FACE, BACKLASH, SHIFT_POT)
     hub_h = HUB_TOP - Z_GEAR0
-    g = g.union(cyl_z(0, 0, HUB_R, 0, hub_h))
+    # The hub starts behind the teeth: on a 15-tooth gear its radius is past the tooth roots.
+    g = g.union(cyl_z(0, 0, HUB_R, GEAR_FACE, hub_h))
     g = g.cut(d_profile(POST_D / 2 + D_BORE_CLR,
                         POST_FLAT - POST_D / 2 + D_BORE_CLR, -1, hub_h + 1))
     zs = GEAR_FACE + SETSCREW_ABOVE_FACE

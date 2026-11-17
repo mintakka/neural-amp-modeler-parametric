@@ -17,8 +17,9 @@
 // Every command answers one line: "OK ..." when finished, or "ERR ...".
 //
 // Why it works this way (SG92R datasheet + measurements, see servo_rig/README.md):
-// - 1000-2000 us is about 180 deg (~5.5 us/deg). Pulses outside that drive the servo into
-//   its internal stops, so they are refused outright.
+// - Nominally 1000-2000 us is about 180 deg, but units vary (ours turn less per us). Each
+//   servo is confined to its own LIMITS (default 1000-2000), widened only from calibration;
+//   500-2500 us is the absolute bound.
 // - An analog servo drives at full speed toward every pulse; it has no speed control and
 //   can't report its position. Slow, knob-like motion therefore comes only from here: each
 //   move is ONE continuous ramp, the pulse advancing a few us every 20 ms frame with gentle
@@ -44,7 +45,11 @@ namespace {
 
 constexpr int kNumServos = 7;
 constexpr uint kPins[kNumServos] = {0, 1, 2, 3, 4, 5, 6};
-constexpr int kUsMin = 1000, kUsMax = 2000; // SG92R datasheet range: never exceeded
+// Absolute bounds no command may exceed. Each servo also has its own LIMITS, which start at
+// the conservative 1000-2000 and are widened per servo only after measuring where its
+// pot's 0 and 10 really are (servos vary; ours need more than 1000-2000 for the full dial).
+constexpr int kUsMin = 500, kUsMax = 2500;
+constexpr int kDefaultLo = 1000, kDefaultHi = 2000;
 constexpr uint16_t kPeriodUs = 20000;
 constexpr int kTickMs = 20;          // one servo frame
 constexpr float kAccel = 1200.f;     // us/s^2: full speed in under 0.4 s
@@ -109,7 +114,7 @@ void Save() {
 }
 
 void Load() {
-    for (int i = 0; i < kNumServos; i++) lo[i] = kUsMin, hi[i] = kUsMax;
+    for (int i = 0; i < kNumServos; i++) lo[i] = kDefaultLo, hi[i] = kDefaultHi;
     int best = -1;
     for (int k = 0; k < kSlots; k++)
         if (Slot(k)->magic == kMagic && (best < 0 || Slot(k)->seq > Slot(best)->seq)) best = k;

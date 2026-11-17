@@ -1,8 +1,8 @@
 # HDRX20 knob servo rig
 
 Seven SG92R servos turn the seven pot posts of the PRS HDRX20 chassis through
-1.8:1 step-up gears (36T on the servo, 20T on the pot, module 1, 28 mm centers).
-A 180° servo gives about 324° at the pot.
+2.73:1 step-up gears (41T on the servo, 15T on the pot, module 1, profile-shifted ±0.35, 28 mm centers).
+Our SG92Rs only travel about 115° between their internal stops, so that gives about 315° at the pot: the full 0–10.
 
 `python servo_rig.py` (conda env `sci`, needs `cadquery`) rebuilds everything,
 runs the checks, and writes `step/*.step`. Parts are exported in print
