@@ -20,6 +20,7 @@ REV6 = HERE / "step/source/pot_gear_rev6.step"
 OUT = HERE / "step/pot_gear_rev7.step"
 TEETH_START = 5.85   # MEASURED from rev6: teeth run from here to the amp-face end
 CORE_R = 8.0         # inside rev6's tooth roots (8.75): every internal feature is within this
+PLAIN_R = 7.7        # rev6's plain section is at most 7.44 in radius; old tooth roots 8.75
 
 
 def main():
@@ -32,8 +33,9 @@ def main():
     def slab(z0, z1, r=50.0):
         return cq.Workplane("XY").workplane(offset=z0).center(cx, cy).circle(r).extrude(z1 - z0)
 
-    # Plain section (fits through the carrier), exactly as rev6.
-    plain = cq.Workplane("XY").add(rev6).intersect(slab(0, TEETH_START))
+    # Plain section (fits through the carrier), exactly as rev6. Trimmed to PLAIN_R too:
+    # rev6's old teeth begin just below TEETH_START, and a sliver of them must not carry over.
+    plain = cq.Workplane("XY").add(rev6).intersect(slab(0, TEETH_START, PLAIN_R))
     # Rev6's internal features in the toothed length: bore, nut trap, inner cutout.
     cavities = slab(TEETH_START, length, CORE_R).cut(cq.Workplane("XY").add(rev6))
     teeth = (involute_gear(Z_POT, MODULE, teeth_len, BACKLASH, SHIFT_POT)
