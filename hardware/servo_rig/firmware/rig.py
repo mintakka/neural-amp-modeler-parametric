@@ -37,10 +37,9 @@ KNOBS = (
 # Servo mounting (numbered 1-7 left to right, matching KNOBS and GP0-GP6):
 #   bottom row: servos 1, 3, 5, 7 -> Presence, Middle, Master Volume, Bass Volume
 #   top row:    servos 2, 4, 6    -> Bass, Treble, Treble Volume   (mounted upside down)
-# Every pot on the amp turns the same way, but the top-row servos face the opposite way.
-# So for the top row a RISING pulse turns the pot the opposite way from the bottom row, and
-# their "pot at 0" pulse is at the opposite end of the servo's travel. Calibration captures
-# this per knob (it records which pulse gives which dial reading), so no code mirrors pulses.
+# Measured on the 41:15 gear rig: on ALL seven knobs a rising pulse turns the pot
+# counterclockwise (dial down), top row included, at about 107 us per clock hour.
+# Calibration records which pulse gives which dial reading per knob, so nothing mirrors pulses.
 TOP_ROW = frozenset({"Bass", "Treble", "Treble Volume"})  # servos 2, 4, 6
 HOME_US = 1500  # servo centre: re-home here with the gear unmeshed, mesh with the pot at 5
 CAL_PATH = Path(__file__).with_name("rig_calibration.json")
