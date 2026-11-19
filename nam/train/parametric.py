@@ -143,6 +143,12 @@ class _MelSpectrogram(_torch.nn.Module):
         return mel.reshape(*original[:-1], mel.shape[-2], mel.shape[-1])
 
 
+def _ddp_rank_world() -> tuple[int, int]:
+    if _torch.distributed.is_available() and _torch.distributed.is_initialized():
+        return _torch.distributed.get_rank(), _torch.distributed.get_world_size()
+    return 0, 1
+
+
 class _CaptureBatchSampler(_Sampler):
     """
     Yield batches whose sample indices all fall inside one capture's contiguous range, so a
@@ -208,6 +214,13 @@ class _CaptureBatchSampler(_Sampler):
             permutation = _torch.randperm(len(batches)).tolist()
             batches = [batches[i] for i in permutation]
             batch_captures = [batch_captures[i] for i in permutation]
+            # Multi-GPU (DDP): every rank builds the same order from the same seed, then takes
+            # every world-th batch, trimmed so all ranks run the same number of steps.
+            rank, world = _ddp_rank_world()
+            if world > 1:
+                stop = len(batches) // world * world
+                batches = batches[rank:stop:world]
+                batch_captures = batch_captures[rank:stop:world]
         # Set before yielding the first batch: everything above runs eagerly on the first
         # `next()` call, since it all precedes the `yield from` below.
         self.last_batch_captures = tuple(batch_captures)
@@ -220,6 +233,8 @@ class _CaptureBatchSampler(_Sampler):
                 total += length // self._batch_size
             else:
                 total += (length + self._batch_size - 1) // self._batch_size
+        if self._shuffle:
+            total //= _ddp_rank_world()[1]
         return total
 
     def capture_for_batch(self, batch_idx: int) -> int:
@@ -957,9 +972,11 @@ class _ParametricModelCheckpoint(_ModelCheckpoint):
 
     def _save_checkpoint(self, trainer: _pl.Trainer, filepath: str) -> None:
         super()._save_checkpoint(trainer, filepath)
+        if not trainer.is_global_zero:  # under DDP, only rank 0 writes the .nam exports
+            return
         stem = _Path(self._nam_stem(filepath))
         outdir, basename = stem.parent, stem.name
-        net = _get_parametric_net(trainer.model)
+        net = _get_parametric_net(trainer.lightning_module)
         try:
             if isinstance(net, _HyperWaveNet):
                 _bake(net, net.nominal_params, output_scale=self._output_scale).export(
