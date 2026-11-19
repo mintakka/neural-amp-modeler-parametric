@@ -144,3 +144,6 @@ AGENTS.md
 
 .DS_Store
 hardware/servo_rig/firmware/build/
+
+# Capture audio (input.wav and recorded amp captures) is large; keep it out of git
+captures/
